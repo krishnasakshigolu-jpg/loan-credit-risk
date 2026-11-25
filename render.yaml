@@ -1,0 +1,11 @@
+# Render blueprint: one free web service running the FastAPI app and the dashboard.
+services:
+  - type: web
+    name: loan-credit-risk
+    runtime: python
+    plan: free
+    # train at build time so the saved model matches the scikit-learn Render installs
+    buildCommand: pip install -r requirements.txt && python train.py
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true

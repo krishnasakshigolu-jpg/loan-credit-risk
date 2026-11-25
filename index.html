@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Loan Risk</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --bg: #f2f2f7; --cell: #ffffff;
+  --fill: rgba(120,120,128,.12); --fill-2: rgba(120,120,128,.20);
+  --sep: rgba(60,60,67,.18);
+  /* label-3 kept at 4.5:1 or better on cards and grey fills */
+  --label: #000; --label-2: rgba(60,60,67,.88); --label-3: rgba(60,60,67,.80);
+  --blue: #0060cc; --accent-fill: var(--blue); --green: #1f7d37; --orange: #c45500; --red: #d70015;
+  --glass: rgba(255,255,255,.62); --glass-edge: rgba(255,255,255,.7);
+  --glass-shadow: 0 8px 32px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+  /* chart roles (validated categorical slots 1-3, diverging red pole) */
+  --s-approved: #2a78d6; --s-rejected: #eb6834; --s-alt: #1baf7a; --s-neg: #e34948;
+  --grid: rgba(60,60,67,.12); --axis: rgba(60,60,67,.35);
+  --seq-1: #cde2fb; --seq-2: #86b6ef; --seq-3: #2a78d6; --seq-4: #184f95;
+  --r-cell: 12px; --r-ctl: 9px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 28px; --s7: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000; --cell: #1c1c1e;
+    --fill: rgba(118,118,128,.24); --fill-2: rgba(118,118,128,.36);
+    --sep: rgba(84,84,88,.6);
+    --label: #fff; --label-2: rgba(235,235,245,.80); --label-3: rgba(235,235,245,.60);
+    /* text blue lifted to 4.5:1 on grey fills; filled controls use a deeper step for white text */
+    --blue: #4aa3ff; --accent-fill: #0a6ce6; --green: #30d158; --orange: #ff9f0a; --red: #ff453a;
+    --glass: rgba(40,40,44,.55); --glass-edge: rgba(255,255,255,.12); --glass-shadow: 0 8px 32px rgba(0,0,0,.5);
+    --s-approved: #3987e5; --s-rejected: #d95926; --s-alt: #199e70; --s-neg: #e66767;
+    --grid: rgba(235,235,245,.10); --axis: rgba(235,235,245,.30);
+    --seq-1: #1a2a3f; --seq-2: #184f95; --seq-3: #2a78d6; --seq-4: #6da7ec;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--label); font: 17px/1.35 var(--font); letter-spacing: -.01em; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; letter-spacing: inherit; }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+[hidden] { display: none !important; }
+
+/* ===== Functional layer: Liquid Glass (bars and nav only) ===== */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--glass-shadow), inset 0 0 0 .5px var(--glass-edge);
+}
+@media (prefers-reduced-transparency: reduce) { .glass { background: var(--cell); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+.sidebar {
+  position: fixed; z-index: 40; top: 12px; bottom: 12px; left: 12px; width: 232px;
+  border-radius: 22px; padding: var(--s4) var(--s3); display: flex; flex-direction: column; gap: 2px;
+}
+.brand { font: 700 20px/1.2 var(--font-display); padding: var(--s2) var(--s3) var(--s4); display: flex; align-items: center; gap: 10px; }
+.brand svg { color: var(--blue); }
+.nav-link {
+  display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 var(--s3);
+  border-radius: 12px; color: var(--label); text-decoration: none; font-size: 17px;
+}
+.nav-link svg { color: var(--blue); flex-shrink: 0; }
+.nav-link:hover { background: var(--fill); }
+.nav-link[aria-current="page"] { background: var(--accent-fill); color: #fff; font-weight: 600; }
+.nav-link[aria-current="page"] svg { color: #fff; }
+.sidebar .foot { margin-top: auto; font-size: 12px; color: var(--label); padding: 0 var(--s3); }
+
+.tabbar {
+  position: fixed; z-index: 40; left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 10px); width: min(420px, calc(100% - 24px));
+  border-radius: 999px; padding: 5px; display: grid; grid-template-columns: repeat(4, 1fr);
+}
+.tabbar a {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  min-height: 52px; border-radius: 999px; color: var(--label); text-decoration: none; font-size: 11px; font-weight: 500;
+}
+.tabbar a[aria-current="page"] { color: var(--blue); background: var(--fill); font-weight: 600; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  padding: calc(env(safe-area-inset-top) + var(--s2)) var(--s4) var(--s2);
+  display: flex; align-items: center; gap: var(--s3);
+  box-shadow: 0 .5px 0 var(--sep);
+}
+.topbar .inline-title { font-weight: 600; opacity: 0; transition: opacity .2s; }
+.topbar.scrolled .inline-title { opacity: 1; }
+.topbar .spacer { flex: 1; }
+
+.btn { min-height: 44px; padding: 0 var(--s4); border: 0; border-radius: 999px; font-weight: 600; font-size: 17px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: transform .15s ease, filter .15s ease; }
+.btn:active { transform: scale(.97); }
+.btn-plain { background: transparent; color: var(--blue); font-weight: 400; padding: 0 var(--s2); }
+.btn-prominent { background: var(--accent-fill); color: #fff; }
+.btn-prominent:hover { filter: brightness(1.08); }
+.btn-tinted { background: var(--fill); color: var(--blue); }
+.btn-block { width: 100%; }
+
+/* ===== Content layer ===== */
+.shell { min-height: 100vh; }
+@media (min-width: 900px) {
+  .shell { margin-left: 256px; }
+  .tabbar, .phone-only { display: none !important; }
+  .topbar { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .topbar.scrolled { background: var(--glass); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 .5px 0 var(--sep); }
+}
+@media (max-width: 899px) { .sidebar, .desk-only { display: none !important; } }
+
+main { max-width: 1180px; margin: 0 auto; padding: 0 var(--s5) calc(110px + env(safe-area-inset-bottom)); }
+@media (max-width: 520px) { main { padding-left: var(--s4); padding-right: var(--s4); } }
+.large-title { font: 700 34px/1.12 var(--font-display); letter-spacing: .01em; margin: var(--s1) 0 var(--s1); }
+.subtitle { color: var(--label-2); margin: 0 0 var(--s5); font-size: 15px; max-width: 64ch; }
+h3.card-title { font-size: 17px; font-weight: 600; margin: 0; }
+.card-sub { font-size: 13px; color: var(--label-2); margin: 2px 0 var(--s4); }
+.card { background: var(--cell); border-radius: 16px; padding: var(--s5); min-width: 0; }
+
+.grid { display: grid; gap: var(--s4); }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.span-all { grid-column: 1 / -1; }
+
+.kpis { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: var(--s4); }
+.kpi { background: var(--cell); border-radius: 14px; padding: var(--s4); }
+.kpi .k { font-size: 13px; color: var(--label-2); }
+.kpi .v { font: 700 28px/1.15 var(--font-display); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.kpi .d { font-size: 13px; color: var(--label-3); margin-top: 2px; }
+
+/* ===== Form (Assess) ===== */
+.layout { display: grid; gap: var(--s6); grid-template-columns: 1fr; }
+@media (min-width: 1100px) { .layout { grid-template-columns: minmax(0,1fr) 380px; align-items: start; } }
+.section-header { font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--label-2); margin: var(--s5) var(--s4) 6px; }
+.section-footer { font-size: 13px; color: var(--label-2); margin: 6px var(--s4) 0; }
+.group { background: var(--cell); border-radius: var(--r-cell); overflow: hidden; }
+.row { min-height: 48px; padding: 6px var(--s4); display: flex; align-items: center; gap: var(--s3); position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: var(--s4); right: 0; height: .5px; background: var(--sep); }
+.row > label, .row > .lbl { flex: 1; min-width: 0; }
+.row .hint { display: block; font-size: 13px; color: var(--label-3); }
+.row.invalid .hint { color: var(--red); }
+.seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--fill); border-radius: var(--r-ctl); padding: 2px; flex-shrink: 0; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { min-height: 32px; min-width: 52px; padding: 0 var(--s3); display: grid; place-items: center; font-size: 15px; font-weight: 500; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.seg input:checked + label { background: var(--cell); box-shadow: 0 2px 6px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); font-weight: 600; }
+@media (prefers-color-scheme: dark) { .seg input:checked + label { background: #636366; } }
+.seg input:focus-visible + label { outline: 3px solid var(--blue); outline-offset: 0; }
+.field { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.field .affix { color: var(--label-3); }
+.field input, .field select { width: 120px; min-height: 36px; border: 0; background: transparent; text-align: right; font-variant-numeric: tabular-nums; color: var(--label-2); }
+.field select { width: auto; appearance: none; -webkit-appearance: none; padding-right: 18px; cursor: pointer;
+  background: linear-gradient(45deg, transparent 50%, var(--label-3) 50%) right 6px center/5px 5px no-repeat, linear-gradient(-45deg, transparent 50%, var(--label-3) 50%) right 1px center/5px 5px no-repeat; }
+.field select option { color: CanvasText; background: Canvas; }
+.field input:focus { color: var(--label); }
+.field input::placeholder { color: var(--label-3); }
+.row.invalid .field input { color: var(--red); }
+@media (max-width: 520px) { .row.stack { flex-direction: column; align-items: stretch; gap: var(--s2); padding: var(--s3) var(--s4); } .row.stack .seg { width: 100%; } }
+.samples { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.chip { min-height: 44px; padding: 0 var(--s3); border-radius: 999px; border: 0; background: var(--cell); color: var(--label); font-size: 15px; cursor: pointer; }
+.chip:hover { background: var(--fill-2); }
+.chip small { color: var(--label-3); margin-left: 4px; }
+@media (max-width: 520px) {
+  .samples { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .chip { border-radius: var(--r-cell); padding: var(--s2) var(--s1); line-height: 1.25; }
+  .chip small { display: block; margin: 0; font-size: 12px; }
+}
+@media (pointer: coarse) {
+  .seg label, .field input, .field select { min-height: 44px; }
+}
+.samples + .source { margin-top: var(--s3); }
+
+.result h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--label-2); margin: 0 0 var(--s3); font-weight: 400; }
+.empty { color: var(--label-2); font-size: 15px; } .empty p { margin: 0 0 var(--s2); }
+.score { display: flex; align-items: baseline; gap: var(--s2); }
+.score .pct { font: 700 56px/1 var(--font-display); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.score .of { color: var(--label-2); font-size: 15px; }
+.band { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--s2); font-weight: 600; }
+.band .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.low { color: var(--green); } .mod { color: var(--orange); } .high { color: var(--red); }
+.meter { position: relative; height: 8px; border-radius: 4px; background: var(--fill); margin: var(--s4) 0 6px; }
+.meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: currentColor; transition: width .35s cubic-bezier(.2,.8,.2,1); }
+.meter .tick { position: absolute; top: -3px; bottom: -3px; width: 1.5px; background: var(--label-3); }
+.meter-scale { position: relative; height: 16px; font-size: 12px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.meter-scale span { position: absolute; }
+.facts { margin: var(--s5) 0 0; padding: 0; list-style: none; border-top: .5px solid var(--sep); }
+.facts li { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3) 0; border-bottom: .5px solid var(--sep); font-size: 15px; }
+.facts svg { flex-shrink: 0; margin-top: 2px; }
+.facts .up { color: var(--green); } .facts .down { color: var(--red); }
+.facts .muted { color: var(--label-2); font-size: 13px; display: block; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px var(--s3); font-size: 15px; margin: var(--s4) 0 0; }
+.kv dt { color: var(--label-2); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.actual { margin-top: var(--s4); padding: var(--s3); border-radius: 10px; background: var(--fill); font-size: 14px; }
+.source { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--label-2); margin: var(--s4) 0 0; }
+.source::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--label-3); flex-shrink: 0; }
+.source.live::before { background: var(--green); }
+.sidebar .source { margin: 0 0 10px; font-size: 12px; align-items: flex-start; } .sidebar .source::before { margin-top: 4px; }
+.whatif { margin-top: var(--s5); }
+.whatif .card-sub { margin-bottom: var(--s3); }
+.result.busy #filled, .result.busy #empty { opacity: .5; transition: opacity .2s; }
+.result.busy h2::after { content: " · Scoring…"; text-transform: none; }
+.note { font-size: 13px; color: var(--label-2); margin: var(--s3) var(--s2) 0; }
+.note p { margin: 0 0 6px; }
+
+/* ===== Charts ===== */
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { font: 12px var(--font); fill: var(--label-2); font-variant-numeric: tabular-nums; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axisline { stroke: var(--axis); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); font-size: 13px; color: var(--label-2); margin: 0 0 var(--s3); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.legend i.line { height: 2px; width: 14px; border-radius: 1px; }
+
+.hbars { display: grid; grid-template-columns: max-content 1fr minmax(3.6em, max-content); gap: 10px var(--s3); align-items: center; font-size: 14px; }
+.hbars .hl { color: var(--label); white-space: nowrap; }
+.hbars .hl small { display: block; color: var(--label-3); font-size: 12px; }
+.hbars .track { position: relative; height: 22px; }
+.hbars .bar { position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 0 4px 4px 0; background: var(--s-approved); min-width: 2px; }
+.hbars .bar.neg { border-radius: 4px 0 0 4px; background: var(--s-neg); }
+.hbars .zero { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--axis); }
+.hbars .ref { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 1.5px dashed var(--label-3); }
+.hbars .hv { text-align: right; font-variant-numeric: tabular-nums; color: var(--label); }
+.ref-key { font-size: 12px; color: var(--label-3); margin-top: var(--s3); display: flex; align-items: center; gap: 6px; }
+.ref-key i { width: 0; height: 12px; border-left: 1.5px dashed var(--label-3); }
+.mini-title { font-size: 13px; font-weight: 600; color: var(--label-2); margin: var(--s4) 0 var(--s2); }
+.mini-title:first-of-type { margin-top: 0; }
+/* columns, not grid, so blocks of 2 to 4 rows pack without holes */
+.multiples { columns: 260px; column-gap: var(--s6); }
+.multiples > div { break-inside: avoid; padding-bottom: var(--s5); }
+
+/* keyboard focus on chart marks; the chart's own ring sits clear of its labels */
+[role="group"][tabindex="0"]:focus-visible { outline-offset: 6px; }
+.track.kb-on .bar { box-shadow: 0 0 0 2px var(--cell), 0 0 0 4px var(--label); }
+.chart rect.kb-on { fill: var(--fill); }
+.chart circle.kb-on { stroke: var(--label); stroke-width: 2.5; r: 6px; }
+.cm .c.kb-on { box-shadow: inset 0 0 0 3px var(--label); }
+
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 3px; font-size: 13px; }
+.cm .h { color: var(--label-2); padding: 6px; text-align: center; }
+.cm .rh { color: var(--label-2); padding: 6px var(--s2) 6px 0; display: flex; align-items: center; justify-content: flex-end; text-align: right; }
+.cm .c { border-radius: 8px; padding: var(--s4) var(--s2); text-align: center; }
+.cm .c b { display: block; font: 700 26px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+
+details.table { margin-top: var(--s3); font-size: 13px; }
+details.table summary { color: var(--blue); cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; }
+details.table table { width: 100%; border-collapse: collapse; margin-top: var(--s2); font-variant-numeric: tabular-nums; }
+details.table th, details.table td { text-align: right; padding: 5px var(--s2); border-bottom: .5px solid var(--sep); }
+details.table th:first-child, details.table td:first-child { text-align: left; }
+details.table th { color: var(--label-2); font-weight: 500; }
+
+#tip { position: fixed; z-index: 100; pointer-events: none; background: var(--cell); color: var(--label); border-radius: 10px;
+  padding: 8px 10px; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 24px rgba(0,0,0,.18), 0 0 0 .5px var(--sep); max-width: 240px; font-variant-numeric: tabular-nums; }
+#tip .tt { font-weight: 600; margin-bottom: 2px; }
+#tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+
+/* ===== Calculators ===== */
+.calc-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--s3); margin: var(--s4) 0; }
+.calc-out > div { background: var(--fill); border-radius: 12px; padding: var(--s3); }
+.calc-out .k { font-size: 12px; color: var(--label-2); }
+.calc-out .v { font: 700 20px/1.2 var(--font-display); font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; }
+.calc-out:has(> :nth-child(4)) { grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) {
+  .calc-out { grid-template-columns: 1fr 1fr; }
+  .calc-out > :first-child:nth-last-child(3) { grid-column: 1 / -1; }
+}
+.calc-out .v.hero { color: var(--blue); }
+.calc .group { background: var(--fill); }
+.calc .row + .row::before { background: var(--sep); }
+.calc .field input { width: 110px; }
+.calc-warn { font-size: 13px; color: var(--red); margin: 0 0 var(--s3); }
+
+.credit { margin-top: var(--s7); padding-top: var(--s4); border-top: .5px solid var(--sep); font-size: 12px; color: var(--label-2); }
+.credit p { margin: 0 0 var(--s1); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar glass" aria-label="Sections">
+  <div class="brand"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 3 6.5V9h18V6.5zM5 10.5h2.5v7H5zm5.75 0h2.5v7h-2.5zm5.75 0H19v7h-2.5zM3 19h18v2.5H3z"/></svg>Loan Risk</div>
+  <a class="nav-link" href="#assess" data-nav="assess"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 4H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3M9 3h6v3H9zM8 12h8M8 16h5"/></svg>Assess</a>
+  <a class="nav-link" href="#insights" data-nav="insights"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 20V10m6 10V4m6 16v-7m4 7H3"/></svg>Insights</a>
+  <a class="nav-link" href="#model" data-nav="model"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 19 9 13l4 3 7-9M15 7h5v5"/></svg>Model</a>
+  <a class="nav-link" href="#calculators" data-nav="calculators"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 7h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>Calculators</a>
+  <div class="foot"><p class="source" data-source>Connecting to the model server…</p>Trained on <span data-fill="n"></span> applications from train.csv.</div>
+</nav>
+
+<div class="shell">
+<header class="topbar glass" id="topbar">
+  <span class="inline-title" id="inlineTitle">Assess</span>
+  <span class="spacer"></span>
+  <span id="assessActions">
+    <button class="btn btn-plain" type="button" id="resetBtn">Clear</button>
+    <button class="btn btn-prominent" type="submit" form="app">Assess risk</button>
+  </span>
+</header>
+
+<main>
+<!-- ===================== ASSESS ===================== -->
+<section id="sec-assess" data-section="assess" aria-labelledby="t-assess">
+  <h1 class="large-title" id="t-assess">Assess</h1>
+  <p class="subtitle">Enter a home loan application to see how likely it is to be approved, and which details push the decision either way.</p>
+
+  <div class="layout">
+    <form id="app" novalidate>
+      <div class="samples" role="group" aria-label="Load an application from the dataset">
+        <button type="button" class="chip" data-sample="LP001005">LP001005 <small>self-employed</small></button>
+        <button type="button" class="chip" data-sample="LP001003">LP001003 <small>rural, married</small></button>
+        <button type="button" class="chip" data-sample="LP001014">LP001014 <small>no credit record</small></button>
+      </div>
+      <p class="source phone-only" data-source>Connecting to the model server…</p>
+
+      <div class="section-header" id="h-income">Income</div>
+      <div class="group" role="group" aria-labelledby="h-income">
+        <div class="row" data-field="applicantIncome">
+          <label for="applicantIncome">Applicant<span class="hint">Monthly income</span></label>
+          <span class="field"><span class="affix">₹</span><input id="applicantIncome" inputmode="numeric" placeholder="Required" autocomplete="off"></span>
+        </div>
+        <div class="row" data-field="coapplicantIncome">
+          <label for="coapplicantIncome">Co-applicant<span class="hint">Monthly income, 0 if none</span></label>
+          <span class="field"><span class="affix">₹</span><input id="coapplicantIncome" inputmode="numeric" placeholder="0" autocomplete="off"></span>
+        </div>
+        <div class="row stack">
+          <span class="lbl" id="l-selfemp">Self-employed</span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-selfemp">
+            <input type="radio" name="selfEmployed" id="se-n" value="No" checked><label for="se-n">No</label>
+            <input type="radio" name="selfEmployed" id="se-y" value="Yes"><label for="se-y">Yes</label>
+          </span>
+        </div>
+      </div>
+
+      <div class="section-header" id="h-loan">Loan</div>
+      <div class="group" role="group" aria-labelledby="h-loan">
+        <div class="row" data-field="loanAmount">
+          <label for="loanAmount">Amount<span class="hint">In thousands</span></label>
+          <span class="field"><span class="affix">₹</span><input id="loanAmount" inputmode="numeric" placeholder="Required" autocomplete="off"><span class="affix">k</span></span>
+        </div>
+        <div class="row">
+          <label for="term">Term</label>
+          <span class="field"><select id="term">
+            <option value="12">1 year</option><option value="36">3 years</option><option value="60">5 years</option>
+            <option value="84">7 years</option><option value="120">10 years</option><option value="180">15 years</option>
+            <option value="240">20 years</option><option value="300">25 years</option>
+            <option value="360" selected>30 years</option><option value="480">40 years</option>
+          </select></span>
+        </div>
+        <div class="row stack">
+          <span class="lbl" id="l-area">Property area</span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-area">
+            <input type="radio" name="area" id="a-u" value="Urban" checked><label for="a-u">Urban</label>
+            <input type="radio" name="area" id="a-s" value="Semiurban"><label for="a-s">Semi-urban</label>
+            <input type="radio" name="area" id="a-r" value="Rural"><label for="a-r">Rural</label>
+          </span>
+        </div>
+      </div>
+
+      <div class="section-header" id="h-credit">Credit</div>
+      <div class="group" role="group" aria-labelledby="h-credit">
+        <div class="row stack">
+          <span class="lbl" id="l-credit">Credit history<span class="hint">Meets lender guidelines</span></span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-credit">
+            <input type="radio" name="credit" id="c-y" value="1" checked><label for="c-y">Yes</label>
+            <input type="radio" name="credit" id="c-n" value="0"><label for="c-n">No</label>
+            <input type="radio" name="credit" id="c-u" value=""><label for="c-u">Unknown</label>
+          </span>
+        </div>
+      </div>
+      <p class="section-footer">The strongest signal in the data: <span data-fill="credit-ok"></span> of applicants with a clean history were approved, against <span data-fill="credit-no"></span> without one.</p>
+
+      <div class="section-header" id="h-house">Household</div>
+      <div class="group" role="group" aria-labelledby="h-house">
+        <div class="row stack">
+          <span class="lbl" id="l-married">Married</span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-married">
+            <input type="radio" name="married" id="m-n" value="No" checked><label for="m-n">No</label>
+            <input type="radio" name="married" id="m-y" value="Yes"><label for="m-y">Yes</label>
+          </span>
+        </div>
+        <div class="row stack">
+          <span class="lbl" id="l-dep">Dependents</span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-dep">
+            <input type="radio" name="dependents" id="d0" value="0" checked><label for="d0">0</label>
+            <input type="radio" name="dependents" id="d1" value="1"><label for="d1">1</label>
+            <input type="radio" name="dependents" id="d2" value="2"><label for="d2">2</label>
+            <input type="radio" name="dependents" id="d3" value="3"><label for="d3">3+</label>
+          </span>
+        </div>
+        <div class="row stack">
+          <span class="lbl" id="l-edu">Education</span>
+          <span class="seg" role="radiogroup" aria-labelledby="l-edu">
+            <input type="radio" name="education" id="e-g" value="Graduate" checked><label for="e-g">Graduate</label>
+            <input type="radio" name="education" id="e-n" value="Not Graduate"><label for="e-n">Not graduate</label>
+          </span>
+        </div>
+      </div>
+      <p class="section-footer">Gender is in the dataset but the model leaves it out on purpose.</p>
+      <button class="btn btn-prominent btn-block phone-only" type="submit" style="margin-top:20px">Assess risk</button>
+    </form>
+
+    <aside class="result-col" aria-live="polite">
+      <section class="card result" id="result">
+        <h2>Assessment</h2>
+        <div class="empty" id="empty">
+          <p>Fill in income and loan amount, then choose Assess risk.</p>
+          <p>Or load one of the real applications above.</p>
+        </div>
+        <div id="filled" hidden>
+          <div class="score"><span class="pct" id="pct">0%</span><span class="of">chance of approval</span></div>
+          <div class="band" id="band"><span class="dot" aria-hidden="true"></span><span id="bandText"></span></div>
+          <div class="meter" id="meter" role="img"><div class="fill" id="meterFill"></div><div class="tick" style="left:45%"></div><div class="tick" style="left:70%"></div></div>
+          <div class="meter-scale" aria-hidden="true"><span style="left:0">0%</span><span style="left:45%;transform:translateX(-50%)">45%</span><span style="left:70%;transform:translateX(-50%)">70%</span><span style="right:0">100%</span></div>
+          <div class="whatif" id="whatifCard" aria-live="off" hidden>
+            <h3 class="card-title">If the loan amount changed</h3>
+            <p class="card-sub">Approval chance at other amounts, with everything else the same</p>
+            <div class="chart" id="chWhatif"></div>
+          </div>
+          <ul class="facts" id="facts" aria-label="What moved the score"></ul>
+          <dl class="kv">
+            <dt>Household income</dt><dd id="kvIncome"></dd>
+            <dt>Repayment per month</dt><dd id="kvEmi"></dd>
+            <dt>Share of income</dt><dd id="kvShare"></dd>
+          </dl>
+          <div class="actual" id="actual" hidden></div>
+          <p class="source" data-source></p>
+          <button class="btn btn-tinted btn-block" type="button" id="toEmi" style="margin-top:16px">Plan repayments for this loan</button>
+        </div>
+      </section>
+      <div class="note"><p>Repayment here is amount ÷ term, the same way the model sees it. The EMI calculator adds interest.</p></div>
+    </aside>
+  </div>
+</section>
+
+<!-- ===================== INSIGHTS ===================== -->
+<section id="sec-insights" data-section="insights" aria-labelledby="t-insights" hidden>
+  <h1 class="large-title" id="t-insights">Insights</h1>
+  <p class="subtitle">What the <span data-fill="n"></span> past applications in train.csv say about who gets approved.</p>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid grid-2">
+    <section class="card span-all">
+      <h3 class="card-title">Credit history decides most cases</h3>
+      <p class="card-sub">Approval rate by credit history</p>
+      <div id="chCredit"></div>
+    </section>
+    <section class="card">
+      <h3 class="card-title">Where applications came from</h3>
+      <p class="card-sub">Monthly household income, approved and rejected applications</p>
+      <div class="chart" id="chIncome"></div>
+    </section>
+    <section class="card">
+      <h3 class="card-title">Loan size against income</h3>
+      <p class="card-sub">Each dot is one application. Both axes use a log scale.</p>
+      <div class="chart" id="chScatter"></div>
+    </section>
+    <section class="card span-all">
+      <h3 class="card-title">Approval rate by applicant group</h3>
+      <p class="card-sub" id="groupsSub"></p>
+      <div class="multiples" id="chGroups"></div>
+    </section>
+    <section class="card span-all">
+      <h3 class="card-title">Gaps in the data</h3>
+      <p class="card-sub">Blank values per column. <span data-fill="missing"></span> of <span data-fill="n"></span> rows have at least one.</p>
+      <div id="chMissing"></div>
+    </section>
+  </div>
+</section>
+
+<!-- ===================== MODEL ===================== -->
+<section id="sec-model" data-section="model" aria-labelledby="t-model" hidden>
+  <h1 class="large-title" id="t-model">Model</h1>
+  <p class="subtitle">Logistic regression on <span data-fill="features"></span> features, tested on <span data-fill="test-n"></span> applications it never saw during training.</p>
+  <div class="kpis" id="mkpis"></div>
+  <div class="grid grid-2">
+    <section class="card">
+      <h3 class="card-title">Where it gets things wrong</h3>
+      <p class="card-sub" id="cmSub"></p>
+      <div id="chCm"></div>
+    </section>
+    <section class="card">
+      <h3 class="card-title">ROC curve</h3>
+      <p class="card-sub">How well it ranks approved above rejected at every threshold. The dashed line is guessing.</p>
+      <div class="chart" id="chRoc"></div>
+    </section>
+    <section class="card span-all">
+      <h3 class="card-title">What the model weighs</h3>
+      <p class="card-sub">Standardised coefficients. Blue raises the approval odds, red lowers them.</p>
+      <div id="chWeights"></div>
+    </section>
+    <section class="card span-all">
+      <h3 class="card-title">Why logistic regression</h3>
+      <p class="card-sub"><span data-fill="models"></span> models compared with 5-fold cross-validation on all <span data-fill="n"></span> rows</p>
+      <div id="chCompare"></div>
+    </section>
+  </div>
+</section>
+
+<!-- ===================== CALCULATORS ===================== -->
+<section id="sec-calculators" data-section="calculators" aria-labelledby="t-calc" hidden>
+  <h1 class="large-title" id="t-calc">Calculators</h1>
+  <p class="subtitle">Plan around the loan itself. Change any number and the results update. The rates filled in are only starting points, so use the one your lender quotes.</p>
+  <div class="grid grid-2">
+
+    <section class="card calc" id="emiCalc">
+      <h3 class="card-title">EMI</h3>
+      <p class="card-sub">Monthly instalment, and how much of it goes to interest each year</p>
+      <div class="group">
+        <div class="row"><label for="emiP">Loan amount</label><span class="field"><span class="affix">₹</span><input id="emiP" inputmode="numeric" value="2500000"></span></div>
+        <div class="row"><label for="emiR">Interest rate<span class="hint">Per year</span></label><span class="field"><input id="emiR" inputmode="decimal" value="8.5"><span class="affix">%</span></span></div>
+        <div class="row"><label for="emiN">Tenure</label><span class="field"><input id="emiN" inputmode="numeric" value="20"><span class="affix">years</span></span></div>
+      </div>
+      <div class="calc-out" id="emiOut"></div>
+      <div class="chart" id="chEmi"></div>
+    </section>
+
+    <section class="card calc" id="affCalc">
+      <h3 class="card-title">Affordability</h3>
+      <p class="card-sub">The largest loan your income can carry</p>
+      <div class="group">
+        <div class="row"><label for="affI">Take-home income<span class="hint">Per month</span></label><span class="field"><span class="affix">₹</span><input id="affI" inputmode="numeric" value="80000"></span></div>
+        <div class="row"><label for="affE">Existing EMIs<span class="hint">Car, personal, card loans</span></label><span class="field"><span class="affix">₹</span><input id="affE" inputmode="numeric" value="5000"></span></div>
+        <div class="row"><label for="affF">Max share for EMIs<span class="hint">Lenders cap this. 50% is a common starting point.</span></label><span class="field"><input id="affF" inputmode="numeric" value="50"><span class="affix">%</span></span></div>
+        <div class="row"><label for="affR">Interest rate</label><span class="field"><input id="affR" inputmode="decimal" value="8.5"><span class="affix">%</span></span></div>
+        <div class="row"><label for="affN">Tenure</label><span class="field"><input id="affN" inputmode="numeric" value="20"><span class="affix">years</span></span></div>
+      </div>
+      <div class="calc-out" id="affOut"></div>
+      <p class="mini-title">Largest loan by tenure</p>
+      <div id="chAff"></div>
+    </section>
+
+    <section class="card calc span-all" id="preCalc">
+      <h3 class="card-title">Prepayment</h3>
+      <p class="card-sub">Pay a little extra every month and see how much sooner the loan closes</p>
+      <div class="grid grid-2" style="gap:24px">
+        <div>
+          <div class="group">
+            <div class="row"><label for="preP">Outstanding loan</label><span class="field"><span class="affix">₹</span><input id="preP" inputmode="numeric" value="2500000"></span></div>
+            <div class="row"><label for="preR">Interest rate</label><span class="field"><input id="preR" inputmode="decimal" value="8.5"><span class="affix">%</span></span></div>
+            <div class="row"><label for="preN">Remaining tenure</label><span class="field"><input id="preN" inputmode="numeric" value="20"><span class="affix">years</span></span></div>
+            <div class="row"><label for="preX">Extra each month</label><span class="field"><span class="affix">₹</span><input id="preX" inputmode="numeric" value="5000"></span></div>
+          </div>
+          <div class="calc-out" id="preOut"></div>
+        </div>
+        <div class="chart" id="chPre"></div>
+      </div>
+    </section>
+
+  </div>
+</section>
+<footer class="credit">
+  <p>A lab project, not a lending decision.</p>
+  <p>Frontend designed by Harshit Poonia.</p>
+</footer>
+</main>
+</div>
+
+<nav class="tabbar glass" aria-label="Sections">
+  <a href="#assess" data-nav="assess"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 4H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3M9 3h6v3H9zM8 12h8M8 16h5"/></svg>Assess</a>
+  <a href="#insights" data-nav="insights"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 20V10m6 10V4m6 16v-7m4 7H3"/></svg>Insights</a>
+  <a href="#model" data-nav="model"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 19 9 13l4 3 7-9M15 7h5v5"/></svg>Model</a>
+  <a href="#calculators" data-nav="calculators"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 7h8M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01"/></svg>Calculators</a>
+</nav>
+
+<div id="tip" role="tooltip" hidden></div>
+
+<script>
+const MODEL = /*MODEL*/{"features":["credit_history","married","graduate","self_employed","semiurban","rural","dependents","log_total_income","log_loan_amount","emi_to_income"],"mean":[0.855049,0.648208,0.781759,0.13355,0.379479,0.291531,0.7443,8.669608,4.866091,0.077391],"std":[0.352052,0.477529,0.413052,0.340169,0.485257,0.454467,1.008801,0.544573,0.490411,0.078952],"coef":[1.316049,0.247129,0.146544,-0.008046,0.328156,-0.089077,0.046665,-0.001756,-0.143249,-0.132656],"intercept":0.839573}/*END*/;
+const DATA = /*DATA*/{"kpi":{"n":614,"approved":422,"median_income":5416.5,"median_loan":128.0,"missing_rows":134},"by_credit":[{"label":"Meets guidelines","n":475,"approved":378},{"label":"Doesn't","n":89,"approved":7},{"label":"Not recorded","n":50,"approved":37}],"by_area":[{"label":"Semi-urban","n":233,"approved":179},{"label":"Urban","n":202,"approved":133},{"label":"Rural","n":179,"approved":110}],"by_edu":[{"label":"Graduate","n":480,"approved":340},{"label":"Not graduate","n":134,"approved":82}],"by_married":[{"label":"Married","n":398,"approved":285},{"label":"Single","n":213,"approved":134}],"by_dep":[{"label":"0","n":345,"approved":238},{"label":"1","n":102,"approved":66},{"label":"2","n":101,"approved":76},{"label":"3+","n":51,"approved":33}],"by_self":[{"label":"Salaried","n":500,"approved":343},{"label":"Self-employed","n":82,"approved":56}],"income_hist":[{"label":"<3k","approved":26,"rejected":20},{"label":"3–4k","approved":71,"rejected":26},{"label":"4–5k","approved":83,"rejected":41},{"label":"5–6k","approved":72,"rejected":23},{"label":"6–8k","approved":79,"rejected":40},{"label":"8–10k","approved":33,"rejected":11},{"label":"10–15k","approved":35,"rejected":17},{"label":"15k+","approved":23,"rejected":14}],"scatter":[[6091,128,0],[3000,66,1],[4941,120,1],[6000,141,1],[9613,267,1],[3849,95,1],[5540,158,0],[5532,168,1],[23809,349,0],[3900,70,1],[4340,109,1],[11179,200,1],[4693,114,0],[2385,17,1],[4950,125,1],[3596,100,1],[3510,76,0],[4887,133,0],[6100,115,1],[7660,104,0],[11580,315,1],[4511,116,0],[5282,112,0],[6642,151,0],[9560,191,1],[5052,122,1],[5266,110,1],[1442,35,0],[5833,120,1],[7535,201,0],[3167,74,0],[4692,106,0],[5167,114,1],[15500,320,0],[3158,100,0],[5126,144,1],[11376,184,1],[5416,110,1],[3600,80,0],[3013,47,1],[2400,75,1],[6277,134,1],[4695,96,1],[3410,88,1],[5649,44,1],[5821,144,1],[6085,120,0],[6275,144,1],[3572,100,1],[3086,120,1],[4230,112,0],[4616,134,0],[11500,286,0],[3875,97,1],[3723,96,1],[5566,135,0],[10330,180,1],[6216,144,1],[6296,120,1],[3029,99,1],[6058,165,0],[4166,116,0],[10321,258,0],[5454,126,0],[10750,312,1],[7100,125,1],[4300,136,0],[6274,172,1],[3750,97,1],[3500,81,1],[4755,95,0],[7040,187,1],[3750,113,0],[8500,176,0],[4022,110,0],[7167,180,0],[5499,130,1],[3846,111,1],[3259,167,0],[8250,265,0],[3988,50,1],[4897,136,1],[5333,99,1],[4618,104,1],[8566,210,1],[9862,175,1],[5858,131,1],[11904,188,1],[5093,81,1],[4133,122,1],[3620,25,1],[4786,137,1],[2974,50,1],[4188,115,1],[5300,131,1],[7551,133,1],[8649,151,1],[4570,160,1],[4082,100,1],[12543,225,1],[7333,120,0],[7400,216,0],[2825,94,1],[5316,136,1],[5262,139,1],[7686,152,0],[5050,118,1],[14583,185,1],[5450,154,1],[3612,85,1],[7710,175,0],[10408,259,1],[8334,180,1],[4166,44,1],[11117,137,1],[2957,81,1],[6314,194,1],[3692,93,1],[23803,370,1],[14363,160,0],[8649,182,0],[20166,650,1],[3943,74,1],[2718,70,1],[3459,25,1],[4895,102,1],[11750,290,0],[4583,84,0],[6816,88,1],[14999,242,0],[5630,129,0],[7125,185,0],[5417,168,1],[6950,175,1],[4732,122,1],[11757,187,1],[6816,100,1],[14866,70,1],[2963,30,1],[11666,225,0],[5690,125,1],[6277,118,0],[6327,152,1],[9166,244,0],[2281,113,0],[3254,50,1],[39999,600,1],[6000,160,1],[9538,187,1],[5063,120,1],[10208,255,1],[2904,98,1],[7933,275,0],[4369,121,0],[5614,158,1],[9323,75,1],[6873,182,1],[4583,112,0],[5772,129,1],[2237,63,0],[8000,200,1],[3589,95,1],[51763,700,1],[3522,81,0],[11333,187,1],[5080,87,0],[5461,116,1],[3664,101,1],[16816,495,0],[3750,116,1],[3784,102,0],[13650,180,0],[6979,67,0],[4600,73,1],[33846,260,0],[3625,108,1],[43897,120,1],[2178,66,0],[4521,58,1],[5970,168,1],[9328,188,1],[4885,48,1],[12000,164,0],[6033,160,0],[3858,76,1],[4191,120,1],[5708,170,0],[12083,187,1],[4272,120,1],[6232,113,1],[11000,83,0],[5100,90,1],[4923,166,1],[4583,135,1],[3917,124,1],[4408,120,1],[3244,80,1],[6506,55,1],[2479,59,1],[3418,127,0],[10000,214,0],[4680,128,0],[7787,240,1],[5703,130,1],[6194,137,1],[4833,100,1],[1950,135,0],[5502,131,1],[5000,72,0],[6666,127,1],[2221,60,0],[5726,116,1],[5762,144,1],[8588,175,1],[6250,128,1],[3250,170,0],[4735,138,0],[7945,210,1],[4758,158,1],[6400,200,1],[4545,104,1],[3716,42,1],[5787,120,1],[8333,280,1],[4934,140,1],[6760,170,1],[5746,255,0],[3463,122,1],[3812,112,1],[3315,96,1],[10819,120,1],[4493,140,0],[8666,155,1],[7550,108,1],[7823,123,1],[10383,120,0],[9703,112,1],[6608,137,1],[4725,123,1],[3677,90,1],[5558,201,0],[3427,138,0],[4750,104,1],[9762,279,1],[16250,192,0],[3083,255,1],[6045,115,0],[5250,94,0],[16783,304,0],[4931,128,0],[10333,330,1],[4269,134,1],[3481,155,0],[7200,120,1],[5166,128,1],[7542,151,1],[6095,150,1],[6144,160,1],[3418,135,0],[4436,90,1],[3237,30,1],[11146,136,1],[4690,126,1],[4843,150,1],[3900,90,1],[4592,115,1],[7267,207,1],[4403,80,1],[14583,436,1],[4100,124,1],[6479,158,0],[4727,112,1],[3286,78,1],[3477,54,1],[6211,89,1],[4317,99,0],[5704,120,1],[4124,115,1],[9508,187,1],[5491,139,1],[4400,127,0],[4713,134,1],[5417,143,0],[5717,172,1],[5666,110,1],[6875,200,1],[4666,135,1],[7541,151,0],[4939,113,0],[4734,93,0],[4625,105,1],[5000,132,1],[3428,96,1],[6500,140,1],[5428,135,1],[4263,104,0],[20233,480,0],[7667,185,1],[2917,84,1],[5332,111,1],[2507,56,1],[5746,144,1],[4316,159,0],[5039,111,1],[3717,120,1],[4192,88,1],[3541,112,1],[10000,155,0],[4567,115,1],[4531,124,1],[6151,132,1],[15000,300,1],[13649,376,0],[4917,130,1],[7978,184,1],[6784,110,0],[2500,67,1],[6177,117,1],[2935,98,1],[2833,71,1],[63337,490,1],[11666,182,1],[9993,70,1],[5938,160,1],[7100,176,1],[4160,71,1],[4234,173,0],[2378,46,0],[5783,158,1],[3173,74,1],[4913,125,1],[4957,160,1],[6753,152,0],[5251,126,1],[10916,259,1],[8875,187,1],[9083,228,1],[12917,308,0],[4749,95,1],[5500,105,0],[2928,130,1],[3813,116,1],[11500,165,1],[3875,67,0],[4666,100,0],[8334,200,1],[4723,81,0],[8667,236,1],[7083,130,1],[6046,95,1],[6822,141,1],[6216,133,0],[2500,96,0],[5124,124,0],[6325,175,1],[24996,570,0],[15759,55,1],[5185,155,1],[17196,380,1],[5049,111,0],[4223,110,1],[5740,120,1],[13746,130,1],[4310,130,1],[3069,71,0],[5391,130,1],[5833,128,1],[10173,296,1],[6000,156,1],[7167,128,1],[4566,100,0],[3667,113,1],[3946,132,1],[4750,136,1],[5488,125,1],[9167,185,1],[9504,275,1],[4698,120,1],[3618,113,1],[4500,113,1],[3760,135,1],[3180,71,0],[4492,95,1],[5568,109,1],[3300,103,0],[2889,45,0],[2755,65,0],[22500,103,1],[1963,53,1],[7441,194,0],[4547,115,1],[4567,115,1],[2213,66,1],[8300,152,0],[81000,360,0],[3867,62,0],[6256,160,1],[6096,218,0],[4286,110,1],[5386,178,0],[2995,60,1],[2600,160,0],[21600,239,0],[3798,112,1],[4663,138,1],[5829,138,1],[2720,80,0],[3539,100,1],[8917,110,0],[14880,96,1],[6966,121,1],[4606,81,0],[5935,133,1],[2936,87,1],[2717,60,1],[8624,150,1],[6500,105,0],[12876,405,1],[4765,143,1],[3750,100,1],[3777,50,1],[10416,187,0],[7142,138,1],[8724,187,1],[9734,180,1],[6700,148,1],[37719,152,1],[15666,175,1],[4676,130,1],[4652,110,1],[4915,55,0],[5050,150,0],[4311,190,0],[3564,125,0],[3414,60,1],[5681,149,0],[4949,90,1],[7085,84,1],[3859,96,1],[4301,118,1],[6277,173,0],[4354,136,1],[8334,160,0],[6166,160,1],[7740,128,1],[5203,153,1],[5191,132,1],[4166,98,0],[6000,140,1],[4611,70,0],[16692,110,1],[3127,98,1],[6784,110,0],[5529,162,1],[4153,113,0],[4691,100,1],[2500,93,1],[10180,162,1],[17539,150,1],[8450,230,1],[4745,132,0],[18917,86,1],[4350,154,1],[3095,113,1],[5233,128,1],[10833,234,1],[8333,246,1],[4394,131,1],[3547,80,0],[18333,500,0],[6666,160,1],[2435,75,0],[5484,96,1],[6464,186,1],[3691,110,1],[17263,225,1],[5754,119,0],[4239,105,1],[4300,107,1],[7482,111,1],[2895,95,1],[10699,209,0],[4328,113,1],[3159,100,1],[10489,208,1],[9352,138,0],[5297,124,1],[7926,243,1],[27500,480,1],[3583,96,0],[5492,188,1],[13262,40,1],[4885,100,0],[8069,250,1],[5318,148,1],[8796,70,0],[9481,311,0],[6894,150,1],[3663,113,1],[4874,123,0],[6598,185,0],[3400,95,0],[3934,45,1],[2500,55,1],[7101,100,1],[15114,480,1],[17500,400,1],[3775,110,1],[6715,161,1],[3981,94,1],[6783,130,1],[6525,216,1],[4281,100,1],[3588,110,0],[11250,196,0],[18165,125,1],[4592,126,1],[10039,324,1],[3617,107,1],[3453,66,0],[6417,157,1],[7453,140,1],[2138,99,0],[3652,95,1],[4763,128,1],[3680,102,1],[4718,155,1],[3358,80,0],[4309,145,1],[5000,103,0],[4801,110,1],[6583,158,1],[4787,181,0],[7859,132,0],[6500,26,1],[4292,84,1],[10139,260,1],[6556,162,1],[6486,182,1],[3917,108,1],[19484,600,1],[7977,211,1],[5800,132,1],[8799,258,0],[4467,120,1],[3333,70,1],[5900,123,0],[2378,9,0],[5230,104,0],[5167,186,1],[6567,165,0],[16666,275,1],[7750,187,0],[6406,150,0],[3620,108,1],[5297,136,0],[5968,110,1],[4014,107,1],[6099,161,1],[6540,205,1],[35673,90,0],[3166,36,1],[1880,61,0],[4704,146,0],[7283,172,0],[3819,104,1],[2165,70,1],[4750,94,1],[2726,106,0],[6416,56,1],[6000,205,0],[9357,292,1],[7159,142,1],[16120,260,1],[3833,110,1],[7383,187,0],[2987,88,0],[9963,180,1],[5780,192,1],[42083,350,0],[5686,155,1],[5703,128,1],[7977,172,1],[12000,496,1],[5900,173,1],[5398,157,1],[5182,108,1],[2900,71,1],[4106,40,1],[8312,253,1],[7583,187,1],[4583,133,0]],"missing":[{"label":"Credit_History","n":50},{"label":"Self_Employed","n":32},{"label":"LoanAmount","n":22},{"label":"Dependents","n":15},{"label":"Loan_Amount_Term","n":14},{"label":"Gender","n":13},{"label":"Married","n":3}],"model":{"accuracy":0.854,"auc":0.863,"precision":0.832,"recall":0.988,"test_n":123,"cm":[[21,17],[1,84]],"roc":[[0.0,0.0],[0.0,0.012],[0.026,0.012],[0.026,0.388],[0.053,0.388],[0.053,0.424],[0.079,0.424],[0.079,0.506],[0.105,0.506],[0.105,0.671],[0.132,0.671],[0.132,0.706],[0.158,0.706],[0.158,0.718],[0.184,0.718],[0.184,0.753],[0.237,0.753],[0.237,0.776],[0.263,0.776],[0.263,0.8],[0.289,0.8],[0.289,0.824],[0.316,0.824],[0.316,0.894],[0.342,0.894],[0.342,0.906],[0.368,0.906],[0.368,0.941],[0.395,0.941],[0.395,0.953],[0.421,0.953],[0.421,0.976],[0.447,0.976],[0.447,0.988],[0.947,0.988],[0.947,1.0],[1.0,1.0]],"cv":0.803,"baseline":0.687,"wrong_approvals_clean_credit":17,"comparison":[{"name":"Logistic regression","accuracy":0.803,"accuracy_sd":0.017,"auc":0.757},{"name":"Decision tree","accuracy":0.798,"accuracy_sd":0.025,"auc":0.722},{"name":"Random forest","accuracy":0.809,"accuracy_sd":0.012,"auc":0.776},{"name":"Gradient boosting","accuracy":0.798,"accuracy_sd":0.02,"auc":0.768},{"name":"Always approve","accuracy":0.687,"accuracy_sd":0.004,"auc":0.5}],"chosen":"Logistic regression","why":"Random forest scored 0.6 points higher, which is inside the fold-to-fold spread of about 1.7 points. Logistic regression was kept because its weights explain every prediction."},"weights":[{"key":"credit_history","label":"Credit history","w":1.316049},{"key":"semiurban","label":"Semi-urban","w":0.328156},{"key":"married","label":"Married","w":0.247129},{"key":"graduate","label":"Graduate","w":0.146544},{"key":"dependents","label":"Dependents","w":0.046665},{"key":"log_total_income","label":"Household income","w":-0.001756},{"key":"self_employed","label":"Self-employed","w":-0.008046},{"key":"rural","label":"Rural","w":-0.089077},{"key":"emi_to_income","label":"Repayment burden","w":-0.132656},{"key":"log_loan_amount","label":"Loan amount","w":-0.143249}]}/*END*/;
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const inr = (n) => "₹" + Math.round(n).toLocaleString("en-IN");
+const inrShort = (n) => n >= 1e7 ? "₹" + (n/1e7).toFixed(n >= 1e8 ? 0 : 2).replace(/\.?0+$/,"") + " Cr" : n >= 1e5 ? "₹" + (n/1e5).toFixed(n >= 1e6 ? 1 : 2).replace(/\.?0+$/,"") + " L" : inr(n);
+const pct = (v, d = 0) => (v * 100).toFixed(d) + "%";
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function svg(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function niceTicks(max, count = 4) {
+  const raw = max / count, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw);
+  const out = []; for (let v = 0; v <= max + step * .001; v += step) out.push(+v.toFixed(10));
+  if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
+  return out;
+}
+function legend(el, items) {
+  const d = document.createElement("div"); d.className = "legend";
+  d.innerHTML = items.map(([n, c, line]) => `<span><i class="${line ? "line" : ""}" style="background:${c}"></i>${esc(n)}</span>`).join("");
+  el.appendChild(d);
+}
+function table(el, head, rows, label = "Show data table") {
+  const d = document.createElement("details"); d.className = "table";
+  d.innerHTML = `<summary>${label}</summary><table><thead><tr>${head.map(h => `<th scope="col">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  el.appendChild(d);
+}
+
+/* ---------- tooltip ---------- */
+const tip = $("tip");
+function showTip(html, x, y) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y - r.height - 10;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top < 8) top = y + 16;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+document.addEventListener("pointermove", (e) => {
+  const t = e.target.closest?.("[data-tip]");
+  if (t) showTip(t.dataset.tip, e.clientX, e.clientY);
+  else if (!e.target.closest?.("[data-cross]")) hideTip();
+});
+document.addEventListener("scroll", hideTip, { passive: true });
+const sw = (c) => `<span class="sw" style="background:${c}"></span>`;
+
+/* ---------- keyboard access for charts: one Tab stop each, arrows step through values ---------- */
+const live = document.createElement("div"); live.className = "sr"; live.setAttribute("aria-live", "polite"); document.body.appendChild(live);
+const plain = (html) => { const d = document.createElement("div"); d.innerHTML = html.replace(/<br>|<\/div>/g, ". "); return d.textContent.replace(/(\. )+/g, ". ").trim(); };
+const nameOf = (el) => (el.closest("section")?.querySelector("h3")?.textContent || "Chart").trim();
+function keyNav(host, count, show, clear, name = nameOf(host)) {
+  host.tabIndex = 0; host.setAttribute("role", "group");
+  host.setAttribute("aria-label", `${name}. Use the arrow keys to read each value.`);
+  let i = -1;
+  // properties, not listeners, so redrawing a chart never stacks handlers
+  host.onkeydown = (e) => {
+    if (e.target !== host) return;
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key], n = count();
+    if (e.key === "Escape") { i = -1; clear(); return; }
+    if (step == null && e.key !== "Home" && e.key !== "End") return;
+    e.preventDefault();
+    if (!n) return;
+    i = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : i < 0 ? 0 : Math.max(0, Math.min(n - 1, i + step));
+    live.textContent = plain(show(i));
+  };
+  host.onblur = () => { i = -1; clear(); };
+}
+function navMarks(host, name) {
+  const marks = () => [...host.querySelectorAll("[data-tip]")].filter(m => m.dataset.tip).sort((a, b) => (a.dataset.k ?? 0) - (b.dataset.k ?? 0));
+  let on = null;
+  const clear = () => { on?.classList.remove("kb-on"); on = null; hideTip(); };
+  keyNav(host, () => marks().length, (i) => {
+    on?.classList.remove("kb-on"); on = marks()[i]; on.classList.add("kb-on");
+    const r = on.getBoundingClientRect(); showTip(on.dataset.tip, r.left + r.width / 2, r.top);
+    return on.dataset.tip;
+  }, clear, name);
+}
+
+/* ---------- chart: horizontal bars (HTML) ---------- */
+function hbars(el, rows, { max = 1, fmt = (v) => pct(v), ref = null, refLabel = "", diverging = false, name } = {}) {
+  navMarks(el, name);
+  el.innerHTML = "";
+  const g = document.createElement("div"); g.className = "hbars";
+  const lo = diverging ? -max : 0, span = max - lo;
+  const x = (v) => (v - lo) / span * 100;
+  for (const r of rows) {
+    const neg = r.value < 0;
+    const left = diverging ? (neg ? x(r.value) : x(0)) : 0;
+    const w = diverging ? Math.abs(x(r.value) - x(0)) : x(r.value);
+    g.insertAdjacentHTML("beforeend",
+      `<div class="hl">${esc(r.label)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</div>
+       <div class="track" data-tip="${esc(r.tip || "")}">
+         ${diverging ? `<div class="zero" style="left:${x(0)}%"></div>` : ""}
+         <div class="bar${neg ? " neg" : ""}" style="left:${left}%;width:${w}%${r.color ? ";background:" + r.color : ""}"></div>
+         ${ref != null ? `<div class="ref" style="left:${x(ref)}%"></div>` : ""}
+       </div>
+       <div class="hv">${fmt(r.value)}</div>`);
+  }
+  el.appendChild(g);
+  if (ref != null && refLabel) el.insertAdjacentHTML("beforeend", `<div class="ref-key"><i></i>${esc(refLabel)}</div>`);
+}
+
+/* ---------- chart: vertical bars, grouped or stacked (SVG) ---------- */
+function vbars(el, { cats, series, stacked = false, h = 240, yFmt = String, tipTitle = (c) => c, xEvery = 1 }) {
+  el.innerHTML = "";
+  legend(el, series.map(s => [s.name, s.color]));
+  const W = el.clientWidth || 400, m = { t: 8, r: 4, b: 26, l: 52 };
+  const iw = W - m.l - m.r, ih = h - m.t - m.b;
+  const totals = cats.map((_, i) => stacked ? series.reduce((a, s) => a + s.values[i], 0) : Math.max(...series.map(s => s.values[i])));
+  const ticks = niceTicks(Math.max(...totals)); const yMax = ticks[ticks.length - 1];
+  const s = svg("svg", { viewBox: `0 0 ${W} ${h}`, height: h, role: "img" }, el);
+  const y = (v) => m.t + ih - v / yMax * ih;
+  for (const t of ticks) { svg("line", { class: "gridline", x1: m.l, x2: W - m.r, y1: y(t), y2: y(t) }, s); svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, s).textContent = yFmt(t); }
+  const band = iw / cats.length, gap = Math.max(2, band * .22), bw = band - gap;
+  cats.forEach((c, i) => {
+    const x0 = m.l + i * band + gap / 2;
+    if (stacked) {
+      let acc = 0;
+      series.forEach((se, k) => {
+        const v = se.values[i], top = k === series.length - 1;
+        const y1 = y(acc + v), y0 = y(acc); acc += v;
+        const hh = Math.max(0, y0 - y1 - (k > 0 ? 2 : 0));
+        if (hh > 0) svg("path", { d: barPath(x0, y1, bw, hh, top ? Math.min(4, bw / 2) : 0), fill: se.color }, s);
+      });
+    } else {
+      const sw2 = (bw - 2 * (series.length - 1)) / series.length;
+      series.forEach((se, k) => { const v = se.values[i], hh = ih - (y(v) - m.t); svg("path", { d: barPath(x0 + k * (sw2 + 2), y(v), sw2, hh, Math.min(4, sw2 / 2)), fill: se.color }, s); });
+    }
+    // count back from the last label so it never lands next to a forced one
+    if ((cats.length - 1 - i) % xEvery === 0) svg("text", { x: x0 + bw / 2, y: h - 8, "text-anchor": "middle" }, s).textContent = c;
+    const hit = svg("rect", { x: m.l + i * band, y: m.t, width: band, height: ih, fill: "transparent" }, s);
+    hit.dataset.tip = `<div class="tt">${esc(tipTitle(c))}</div>` + series.map(se => `${sw(se.color)}${esc(se.name)}: ${yFmt(se.values[i], true)}`).join("<br>");
+  });
+  svg("line", { class: "axisline", x1: m.l, x2: W - m.r, y1: m.t + ih, y2: m.t + ih }, s);
+  navMarks(el);
+}
+function barPath(x, y, w, h, r) {
+  r = Math.min(r, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+/* ---------- chart: lines with crosshair (SVG) ---------- */
+function lines(el, { series, xDomain, yDomain, xTicks: xTicks, yTicks, xFmt, yFmt, h = 260, refs = [], marker = null, diag = false, step = false, tipX = xFmt, tipY = yFmt }) {
+  el.innerHTML = "";
+  if (series.length > 1 || marker) legend(el, [...series.map(s => [s.name, s.color, true]), ...(marker ? [[marker.label, css("--label"), false]] : [])]);
+  const W = el.clientWidth || 400, m = { t: 10, r: 12, b: 28, l: 52 };
+  const iw = W - m.l - m.r, ih = h - m.t - m.b;
+  const x = (v) => m.l + (v - xDomain[0]) / (xDomain[1] - xDomain[0]) * iw;
+  const y = (v) => m.t + ih - (v - yDomain[0]) / (yDomain[1] - yDomain[0]) * ih;
+  const s = svg("svg", { viewBox: `0 0 ${W} ${h}`, height: h, role: "img" }, el);
+  for (const t of yTicks) { svg("line", { class: "gridline", x1: m.l, x2: W - m.r, y1: y(t), y2: y(t) }, s); svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, s).textContent = yFmt(t); }
+  { const minGap = 60; let last = -1e9; xTicks = xTicks.filter((t, i) => { const keep = i === xTicks.length - 1 ? x(t) - last >= minGap : x(t) - last >= minGap && (xTicks.length - 1 === i || x(xTicks[xTicks.length - 1]) - x(t) >= minGap); if (keep) last = x(t); return keep; }); }
+  xTicks.forEach((t, i) => svg("text", { x: x(t), y: h - 8, "text-anchor": i === 0 ? "start" : i === xTicks.length - 1 ? "end" : "middle" }, s).textContent = xFmt(t));
+  svg("line", { class: "axisline", x1: m.l, x2: W - m.r, y1: m.t + ih, y2: m.t + ih }, s);
+  if (diag) svg("line", { x1: x(xDomain[0]), y1: y(yDomain[0]), x2: x(xDomain[1]), y2: y(yDomain[1]), stroke: css("--label-3"), "stroke-width": 1.5, "stroke-dasharray": "4 4" }, s);
+  for (const r of refs) {
+    svg("line", { x1: m.l, x2: W - m.r, y1: y(r.y), y2: y(r.y), stroke: css("--label-3"), "stroke-width": 1.5, "stroke-dasharray": "4 4" }, s);
+    svg("text", { x: W - m.r, y: y(r.y) - 5, "text-anchor": "end" }, s).textContent = r.label;
+  }
+  for (const se of series) {
+    const d = se.points.map((p, i) => {
+      if (step && i > 0) return `H${x(p[0])}V${y(p[1])}`;
+      return `${i ? "L" : "M"}${x(p[0])},${y(p[1])}`;
+    }).join("");
+    svg("path", { d, fill: "none", stroke: se.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, s);
+  }
+  if (marker) {
+    svg("circle", { cx: x(marker.x), cy: y(marker.y), r: 6, fill: css("--label"), stroke: css("--cell"), "stroke-width": 2 }, s);
+  }
+  // crosshair
+  const vline = svg("line", { y1: m.t, y2: m.t + ih, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden" }, s);
+  const dots = series.map(se => svg("circle", { r: 5, fill: se.color, stroke: css("--cell"), "stroke-width": 2, visibility: "hidden" }, s));
+  const hit = svg("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent" }, s);
+  hit.dataset.cross = "1";
+  const base = series[0].points;
+  const at = (best) => {
+    const xv = base[best][0];
+    vline.setAttribute("x1", x(xv)); vline.setAttribute("x2", x(xv)); vline.setAttribute("visibility", "visible");
+    let html = `<div class="tt">${tipX(xv)}</div>`;
+    series.forEach((se, k) => {
+      const p = se.points[Math.min(best, se.points.length - 1)];
+      if (!p) return;
+      dots[k].setAttribute("cx", x(p[0])); dots[k].setAttribute("cy", y(p[1])); dots[k].setAttribute("visibility", "visible");
+      html += `${sw(se.color)}${esc(se.name)}: ${tipY(p[1])}<br>`;
+    });
+    return html;
+  };
+  const clear = () => { vline.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); hideTip(); };
+  hit.addEventListener("pointermove", (e) => {
+    const r = s.getBoundingClientRect(), px = (e.clientX - r.left) * (W / r.width);
+    let best = 0, bd = Infinity;
+    base.forEach((p, i) => { const d = Math.abs(x(p[0]) - px); if (d < bd) { bd = d; best = i; } });
+    showTip(at(best), e.clientX, e.clientY);
+  });
+  hit.addEventListener("pointerleave", clear);
+  keyNav(el, () => base.length, (i) => {
+    const html = at(i), r = dots[0].getBoundingClientRect();
+    showTip(html, r.left + r.width / 2, r.top);
+    return html;
+  }, clear);
+}
+
+/* ---------- chart: scatter, log axes (SVG) ---------- */
+function scatter(el) {
+  el.innerHTML = "";
+  const cA = css("--s-approved"), cR = css("--s-rejected");
+  legend(el, [["Approved", cA], ["Rejected", cR]]);
+  const W = el.clientWidth || 400, h = 300, m = { t: 10, r: 12, b: 40, l: 52 };
+  const iw = W - m.l - m.r, ih = h - m.t - m.b;
+  const lx = [Math.log10(1000), Math.log10(90000)], ly = [Math.log10(8), Math.log10(800)];
+  const x = (v) => m.l + (Math.log10(v) - lx[0]) / (lx[1] - lx[0]) * iw;
+  const y = (v) => m.t + ih - (Math.log10(v) - ly[0]) / (ly[1] - ly[0]) * ih;
+  const s = svg("svg", { viewBox: `0 0 ${W} ${h}`, height: h, role: "img", "aria-label": "Scatter of household income against loan amount" }, el);
+  for (const t of [10, 20, 50, 100, 200, 500]) { svg("line", { class: "gridline", x1: m.l, x2: W - m.r, y1: y(t), y2: y(t) }, s); svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, s).textContent = "₹" + t + "k"; }
+  for (const t of [1000, 2000, 5000, 10000, 20000, 50000]) { svg("line", { class: "gridline", y1: m.t, y2: m.t + ih, x1: x(t), x2: x(t) }, s); svg("text", { x: x(t), y: m.t + ih + 16, "text-anchor": "middle" }, s).textContent = "₹" + (t / 1000) + "k"; }
+  svg("text", { x: m.l + iw / 2, y: h - 4, "text-anchor": "middle" }, s).textContent = "Household income per month";
+  const pts = DATA.scatter.filter(p => p[0] >= 1000);
+  const tipOf = (inc, amt, ok) => `<div class="tt">${ok ? "Approved" : "Rejected"}</div>Income ${inr(inc)} / month<br>Loan ₹${amt}k`;
+  const P = [];
+  // small, see-through dots so the dense middle reads as density; rejected drawn last so the smaller group stays visible
+  for (const ok of [1, 0]) for (const [inc, amt, st] of pts) {
+    if (st !== ok) continue;
+    const p = { x: x(inc), y: y(Math.max(amt, 8)), inc, amt, ok };
+    const c = svg("circle", { cx: p.x, cy: p.y, r: 3, fill: ok ? cA : cR, "fill-opacity": .55, stroke: css("--cell"), "stroke-width": .75 }, s);
+    c.dataset.tip = tipOf(inc, amt, ok); c.dataset.k = inc; P.push(p);
+  }
+  // nearest-point hover: the pointer only has to be closest, within 24px
+  const ring = svg("circle", { r: 6, fill: "none", stroke: css("--label"), "stroke-width": 2, visibility: "hidden" }, s);
+  const hit = svg("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent" }, s);
+  hit.dataset.cross = "1";
+  hit.addEventListener("pointermove", (e) => {
+    const r = s.getBoundingClientRect(), k = W / r.width, px = (e.clientX - r.left) * k, py = (e.clientY - r.top) * k;
+    let best = null, bd = (24 * k) ** 2;
+    for (const p of P) { const d = (p.x - px) ** 2 + (p.y - py) ** 2; if (d < bd) { bd = d; best = p; } }
+    if (!best) { ring.setAttribute("visibility", "hidden"); return hideTip(); }
+    ring.setAttribute("cx", best.x); ring.setAttribute("cy", best.y); ring.setAttribute("visibility", "visible");
+    showTip(tipOf(best.inc, best.amt, best.ok), e.clientX, e.clientY);
+  });
+  hit.addEventListener("pointerleave", () => { ring.setAttribute("visibility", "hidden"); hideTip(); });
+  navMarks(el);
+  table(el, ["Outcome", "Applications", "Median income", "Median loan"], [1, 0].map(ok => {
+    const g = pts.filter(p => p[2] === ok), med = (a) => { a = [...a].sort((p, q) => p - q); return a[a.length >> 1]; };
+    return [ok ? "Approved" : "Rejected", g.length, inr(med(g.map(p => p[0]))), "₹" + med(g.map(p => p[1])) + "k"];
+  }), "Show summary table");
+}
+
+/* ===================== ASSESS ===================== */
+const SAMPLES = {
+  LP001005: { applicantIncome: 3000, coapplicantIncome: 0, loanAmount: 66, term: 360, credit: "1", area: "Urban", married: "Yes", dependents: "0", education: "Graduate", selfEmployed: "Yes", actual: "Y" },
+  LP001003: { applicantIncome: 4583, coapplicantIncome: 1508, loanAmount: 128, term: 360, credit: "1", area: "Rural", married: "Yes", dependents: "1", education: "Graduate", selfEmployed: "No", actual: "N" },
+  LP001014: { applicantIncome: 3036, coapplicantIncome: 2504, loanAmount: 158, term: 360, credit: "0", area: "Semiurban", married: "Yes", dependents: "3", education: "Graduate", selfEmployed: "No", actual: "N" },
+};
+const PHRASES = {
+  credit_history: ["Credit history meets guidelines", "No qualifying credit history"],
+  married: ["Married applicant", "Single applicant"], graduate: ["Graduate", "Not a graduate"],
+  self_employed: ["Salaried", "Self-employed"], semiurban: ["Semi-urban property", "Not semi-urban"],
+  rural: ["Not a rural property", "Rural property"], dependents: ["Fewer dependents", "More dependents"],
+  log_total_income: ["Household income", "Household income"], log_loan_amount: ["Smaller loan amount", "Larger loan amount"],
+  emi_to_income: ["Low repayment burden", "High repayment burden"],
+};
+const form = $("app");
+const radio = (name) => form.querySelector(`input[name="${name}"]:checked`).value;
+const setRadio = (name, v) => { const el = form.querySelector(`input[name="${name}"][value="${v}"]`); if (el) el.checked = true; };
+const num = (id) => { const s = $(id).value.replace(/[,\s₹]/g, ""); return s === "" ? null : Number(s); };
+let assessed = false, currentSample = null;
+const HINTS = { applicantIncome: "Monthly income", coapplicantIncome: "Monthly income, 0 if none", loanAmount: "In thousands" };
+
+function validate() {
+  const checks = [
+    ["applicantIncome", v => v !== null && v > 0, "Enter a monthly income above 0"],
+    ["coapplicantIncome", v => v === null || v >= 0, "Can't be negative"],
+    ["loanAmount", v => v !== null && v > 0, "Enter the loan amount"],
+  ];
+  let ok = true, firstBad = null;
+  for (const [id, test, msg] of checks) {
+    const v = num(id), row = form.querySelector(`[data-field="${id}"]`), bad = Number.isNaN(v) || !test(v);
+    row.classList.toggle("invalid", bad); $(id).setAttribute("aria-invalid", bad);
+    row.querySelector(".hint").textContent = bad ? msg : HINTS[id];
+    if (bad) { ok = false; firstBad ??= $(id); }
+  }
+  const amt = num("loanAmount"), [lo, hi] = loanRange();
+  if (ok && (amt < lo || amt > hi)) form.querySelector('[data-field="loanAmount"] .hint').textContent = `Outside ₹${lo}k to ₹${hi}k, the range in the training data`;
+  return { ok, firstBad };
+}
+function readForm() {
+  return { ai: num("applicantIncome"), ci: num("coapplicantIncome") ?? 0, amt: num("loanAmount"), term: Number($("term").value), credit: radio("credit"),
+    married: radio("married"), education: radio("education"), selfEmployed: radio("selfEmployed"), area: radio("area"), dependents: Number(radio("dependents")) };
+}
+function predict(f) {
+  const income = f.ai + f.ci, emi = f.amt * 1000 / f.term;
+  const x = {
+    credit_history: f.credit === "" ? 1 : Number(f.credit),   // training imputed missing as 1
+    married: f.married === "Yes" ? 1 : 0, graduate: f.education === "Graduate" ? 1 : 0, self_employed: f.selfEmployed === "Yes" ? 1 : 0,
+    semiurban: f.area === "Semiurban" ? 1 : 0, rural: f.area === "Rural" ? 1 : 0, dependents: f.dependents,
+    log_total_income: Math.log1p(income), log_loan_amount: Math.log1p(f.amt), emi_to_income: emi / Math.max(income, 1),
+  };
+  let z = MODEL.intercept;
+  const contrib = MODEL.features.map((k, i) => { const c = MODEL.coef[i] * (x[k] - MODEL.mean[i]) / MODEL.std[i]; z += c; return { f: k, c }; });
+  return { p: 1 / (1 + Math.exp(-z)), contrib, income, emi, creditUnknown: f.credit === "" };
+}
+const bandOf = (p) => p >= .70 ? ["low", "Low risk"] : p >= .45 ? ["mod", "Moderate risk"] : ["high", "High risk"];
+
+/* ---------- FastAPI backend, with the in-page copy as fallback ---------- */
+let API = false;
+const toBody = (f) => ({
+  applicant_income: f.ai, coapplicant_income: f.ci, loan_amount: f.amt, loan_term: f.term,
+  credit_history: f.credit === "" ? null : Number(f.credit), property_area: f.area, married: f.married === "Yes",
+  dependents: f.dependents, graduate: f.education === "Graduate", self_employed: f.selfEmployed === "Yes",
+});
+async function api(path, body) {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 4000);
+  try {
+    const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal } : { signal: ctl.signal });
+    if (!r.ok) throw new Error(path + " returned " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+function setSource(live, msg) {
+  API = live;
+  const text = msg || (live ? "Scored by the Python model through FastAPI." : "Scored by the copy of the model inside this page. Start the server for the live model.");
+  document.querySelectorAll("[data-source]").forEach(el => { el.textContent = text; el.classList.toggle("live", live); });
+}
+async function score(f) {
+  if (API) {
+    try {
+      const d = await api("/api/predict", toBody(f));
+      return { p: d.probability, contrib: d.factors.map(x => ({ f: x.key, c: x.effect })), income: d.household_income, emi: d.monthly_repayment, creditUnknown: d.credit_history_assumed };
+    } catch { setSource(false, "The server stopped answering, so this score comes from the copy inside the page."); }
+  }
+  return predict(f);
+}
+async function connect() {
+  if (location.protocol === "file:") return setSource(false);
+  try {
+    await api("/api/health");
+    Object.assign(DATA, await api("/api/stats"));
+    setSource(true);
+  } catch { setSource(false); }
+}
+
+const loanRange = () => { const a = DATA.scatter.map(p => p[1]); return [Math.min(...a), Math.max(...a)]; };
+let renderSeq = 0, lastP = null;
+async function render() {
+  const f = readForm(), id = ++renderSeq, res = $("result");
+  res.setAttribute("aria-busy", "true");
+  // no flash when the answer is instant; a superseded request never dims the card
+  const slow = setTimeout(() => id === renderSeq && res.classList.add("busy"), 150);
+  const r = await score(f);
+  clearTimeout(slow);
+  if (id !== renderSeq) return;   // a newer edit already started
+  res.classList.remove("busy"); res.removeAttribute("aria-busy");
+  lastP = r.p;
+  const P = Math.round(r.p * 100), band = bandOf(r.p);
+  $("empty").hidden = true; $("filled").hidden = false; $("whatifCard").hidden = false;
+  $("pct").textContent = P + "%";
+  $("band").className = "band " + band[0]; $("bandText").textContent = band[1];
+  $("meter").className = "meter " + band[0];
+  $("meter").setAttribute("aria-label", `${P}% chance of approval, ${band[1].toLowerCase()}`);
+  $("meterFill").style.width = P + "%";
+  $("kvIncome").textContent = inr(r.income); $("kvEmi").textContent = inr(r.emi);
+  const share = r.emi / r.income * 100; $("kvShare").textContent = (share >= 100 ? "Over 100" : share.toFixed(0)) + "%";
+  const up = '<svg class="up" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const down = '<svg class="down" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const top = r.contrib.filter(d => Math.abs(d.c) > .02).sort((a, b) => Math.abs(b.c) - Math.abs(a.c)).slice(0, 4);
+  $("facts").innerHTML = top.length ? top.map(({ f: k, c }) => {
+    let text = PHRASES[k][c > 0 ? 0 : 1];
+    if (k === "credit_history" && r.creditUnknown) text = "Credit history unknown, treated as meeting guidelines";
+    return `<li>${c > 0 ? up : down}<span>${text}<span class="muted">${c > 0 ? "Raises" : "Lowers"} the odds</span></span></li>`;
+  }).join("") : "<li><span>No single detail moves this much; it sits near the average applicant.</span></li>";
+  if (currentSample) {
+    const got = SAMPLES[currentSample].actual === "Y", agree = got === (r.p >= .5);
+    $("actual").hidden = false;
+    $("actual").textContent = `${currentSample} was actually ${got ? "approved" : "rejected"}. ${agree ? "The model agrees." : "The model gets this one wrong."}`;
+  } else $("actual").hidden = true;
+  drawWhatif();
+}
+let whatifSeq = 0;
+async function drawWhatif() {
+  if ($("whatifCard").hidden || $("sec-assess").hidden) return;
+  const f = readForm(), id = ++whatifSeq;
+  let pts = null;
+  if (API) { try { pts = (await api("/api/what-if", toBody(f))).points.map(([a, p]) => [a, p * 100]); } catch { pts = null; } }
+  if (!pts) { pts = []; for (let a = 10; a <= 700; a += 5) pts.push([a, predict({ ...f, amt: a }).p * 100]); }
+  if (id !== whatifSeq) return;
+  lines($("chWhatif"), {
+    series: [{ name: "Approval chance", color: css("--s-approved"), points: pts }],
+    xDomain: [10, 700], yDomain: [0, 100], xTicks: [10, 100, 200, 300, 400, 500, 600, 700], yTicks: [0, 45, 70, 100],
+    xFmt: (v) => "₹" + v + "k", yFmt: (v) => v + "%", tipY: (v) => v.toFixed(0) + "%", tipX: (v) => "Loan ₹" + v + "k",
+    marker: { x: Math.min(700, Math.max(10, f.amt)), y: (lastP ?? predict(f).p) * 100, label: "This application" }, h: 180,
+  });
+}
+
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const v = validate(); if (!v.ok) { v.firstBad.focus(); return; }
+  assessed = true; render(); revealResult();
+});
+// below 1100px the result sits under the form, so bring it into view
+const revealResult = () => { if (matchMedia("(max-width: 1099px)").matches) $("result").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); };
+let typing; form.addEventListener("input", (e) => { if (e.isTrusted) currentSample = null; clearTimeout(typing); typing = setTimeout(() => { if (assessed && validate().ok) render(); }, 120); });
+form.addEventListener("change", () => { if (assessed && validate().ok) render(); });
+document.querySelectorAll("[data-sample]").forEach(btn => btn.addEventListener("click", () => {
+  const s = SAMPLES[btn.dataset.sample];
+  $("applicantIncome").value = s.applicantIncome; $("coapplicantIncome").value = s.coapplicantIncome; $("loanAmount").value = s.loanAmount; $("term").value = s.term;
+  for (const k of ["credit", "area", "married", "dependents", "education", "selfEmployed"]) setRadio(k, s[k]);
+  currentSample = btn.dataset.sample; validate(); assessed = true; render(); revealResult();
+}));
+$("resetBtn").addEventListener("click", () => {
+  form.reset(); assessed = false; currentSample = null; renderSeq++; whatifSeq++; lastP = null;
+  for (const [id, t] of Object.entries(HINTS)) { const row = form.querySelector(`[data-field="${id}"]`); row.classList.remove("invalid"); row.querySelector(".hint").textContent = t; $(id).removeAttribute("aria-invalid"); }
+  $("empty").hidden = false; $("filled").hidden = true; $("whatifCard").hidden = true;
+  $("applicantIncome").focus();
+});
+$("toEmi").addEventListener("click", () => {
+  const f = readForm();
+  $("emiP").value = Math.round(f.amt * 1000); $("emiN").value = Math.round(f.term / 12);
+  location.hash = "#calculators";
+});
+
+/* ===================== INSIGHTS ===================== */
+const COLNAMES = { Credit_History: "Credit history", Self_Employed: "Self-employed", LoanAmount: "Loan amount", Dependents: "Dependents", Loan_Amount_Term: "Loan term", Gender: "Gender", Married: "Married" };
+const rate = (g) => g.approved / g.n;
+const ptsFmt = (v) => { const p = Math.round(v * 100); return p === 0 ? "0 pts" : (p > 0 ? "+" : "−") + Math.abs(p) + " pts"; };
+const gapWords = (v) => { const p = Math.abs(Math.round(v * 100)); return p === 0 ? "Level with" : `${p} point${p === 1 ? "" : "s"} ${v > 0 ? "above" : "below"}`; };
+// every number in the page copy comes from DATA, which /api/stats may refresh
+function fillCopy() {
+  const K = DATA.kpi;
+  const v = { n: K.n.toLocaleString("en-IN"), missing: K.missing_rows,
+    "credit-ok": pct(rate(DATA.by_credit[0])), "credit-no": pct(rate(DATA.by_credit[1])),
+    features: MODEL.features.length, "test-n": DATA.model.test_n, models: DATA.model.comparison.length };
+  document.querySelectorAll("[data-fill]").forEach(el => { el.textContent = v[el.dataset.fill]; });
+}
+function drawInsights() {
+  const K = DATA.kpi, overall = K.approved / K.n;
+  $("kpis").innerHTML = [
+    ["Applications", K.n.toLocaleString("en-IN"), "Rows in train.csv"],
+    ["Approved", pct(overall, 1), `${K.approved} of ${K.n}`],
+    ["Median household income", inr(K.median_income), "Per month, both applicants"],
+    ["Median loan", "₹" + K.median_loan + "k", "Amount asked for"],
+    ["Incomplete rows", K.missing_rows, "At least one blank value"],
+  ].map(([k, v, d]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+
+  const rateRows = (arr) => arr.map(g => ({ label: g.label, sub: `${g.n} applications`, value: g.approved / g.n, tip: `<div class="tt">${esc(g.label)}</div>${g.approved} of ${g.n} approved (${pct(g.approved / g.n)})` }));
+  const cEl = $("chCredit");
+  hbars(cEl, rateRows(DATA.by_credit), { ref: overall, refLabel: `Overall rate, ${pct(overall, 1)}` });
+  const no = DATA.by_credit[1];
+  cEl.insertAdjacentHTML("beforeend", `<p class="note" style="margin:16px 0 0">Only ${no.approved} of the ${no.n} applicants without a qualifying history got a loan. No other detail in the data comes close to this gap.</p>`);
+  table(cEl, ["Credit history", "Applications", "Approved", "Rate"], DATA.by_credit.map(g => [g.label, g.n, g.approved, pct(g.approved / g.n, 1)]));
+
+  // gaps from the overall rate, on one shared scale, so 61% vs 77% reads as a real difference
+  const groups = [["Property area", DATA.by_area], ["Marital status", DATA.by_married], ["Education", DATA.by_edu], ["Employment", DATA.by_self], ["Dependents", DATA.by_dep]];
+  const gapMax = Math.max(...groups.flatMap(([, a]) => a.map(g => Math.abs(rate(g) - overall))));
+  $("groupsSub").textContent = `How far each group's approval rate sits above or below the overall rate of ${pct(overall, 1)}. Longer bars mean the detail matters more.`;
+  const gEl = $("chGroups"); gEl.innerHTML = "";
+  for (const [title, arr] of groups) {
+    const box = document.createElement("div");
+    box.innerHTML = `<div class="mini-title">${title}</div>`;
+    const inner = document.createElement("div"); box.appendChild(inner);
+    hbars(inner, arr.map(g => ({ label: g.label, sub: `${pct(rate(g))} of ${g.n}`, value: rate(g) - overall,
+      tip: `<div class="tt">${esc(g.label)}</div>${g.approved} of ${g.n} approved (${pct(rate(g))})<br>${gapWords(rate(g) - overall)} the overall rate of ${pct(overall, 1)}` })),
+      { max: gapMax * 1.1, diverging: true, fmt: ptsFmt, name: `${title}, approval rate against the overall rate` });
+    gEl.appendChild(box);
+  }
+
+  const iEl = $("chIncome");
+  vbars(iEl, { cats: DATA.income_hist.map(d => "₹" + d.label), series: [
+    { name: "Approved", color: css("--s-approved"), values: DATA.income_hist.map(d => d.approved) },
+    { name: "Rejected", color: css("--s-rejected"), values: DATA.income_hist.map(d => d.rejected) }],
+    yFmt: (v, t) => t ? v + " applications" : String(v), tipTitle: (c) => c + " a month", h: 300, xEvery: innerWidth < 600 ? 2 : 1 });
+  table(iEl, ["Income per month", "Approved", "Rejected", "Approval rate"], DATA.income_hist.map(d => ["₹" + d.label, d.approved, d.rejected, pct(d.approved / (d.approved + d.rejected))]));
+
+  scatter($("chScatter"));
+
+  const mEl = $("chMissing"), mMax = DATA.missing[0].n;
+  hbars(mEl, DATA.missing.map(d => ({ label: COLNAMES[d.label] || d.label, value: d.n, color: css("--seq-2"), tip: `<div class="tt">${esc(COLNAMES[d.label] || d.label)}</div>${d.n} blank (${pct(d.n / K.n, 1)} of rows)` })), { max: mMax * 1.1, fmt: String });
+  mEl.insertAdjacentHTML("beforeend", `<p class="note" style="margin:12px 0 0">Training filled blank credit history as "meets guidelines" and blank loan amounts with the median, ₹${K.median_loan}k.</p>`);
+}
+
+/* ===================== MODEL ===================== */
+function drawModel() {
+  const M = DATA.model, [[tn, fp], [fn, tp]] = M.cm;
+  $("mkpis").innerHTML = [
+    ["Cross-validated accuracy", pct(M.cv, 1), `5 folds over all ${DATA.kpi.n} rows`],
+    ["Held-out accuracy", pct(M.accuracy, 1), `${M.test_n} applications it never saw`],
+    ["Always approve", pct(M.baseline, 1), "Accuracy of the lazy baseline"],
+    ["ROC AUC", M.auc.toFixed(3), "Held-out set. 0.5 is guessing"],
+  ].map(([k, v, d]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+
+  $("cmSub").textContent = `It approves ${tp} of ${tp + fn} applicants who were approved, but catches only ${tn} of ${tn + fp} who were rejected.`;
+  const max = Math.max(tn, fp, fn, tp);
+  const cell = (v, label) => {
+    const t = v / max, bg = t > .66 ? "--seq-4" : t > .33 ? "--seq-3" : t > .12 ? "--seq-2" : "--seq-1";
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const ink = dark ? (bg === "--seq-4" ? "#0b0b0b" : "#fff") : (bg === "--seq-3" || bg === "--seq-4" ? "#fff" : "var(--label)");
+    return `<div class="c" style="background:var(${bg});color:${ink}" data-tip="<div class='tt'>${label}</div>${v} applications"><b>${v}</b>${label}</div>`;
+  };
+  $("chCm").innerHTML = `<div class="cm" role="table" aria-label="Confusion matrix">
+    <div></div><div class="h">Model said reject</div><div class="h">Model said approve</div>
+    <div class="rh">Actually<br>rejected</div>${cell(tn, "Correctly rejected")}${cell(fp, "Approved by mistake")}
+    <div class="rh">Actually<br>approved</div>${cell(fn, "Rejected by mistake")}${cell(tp, "Correctly approved")}
+  </div><p class="note" style="margin:12px 0 0">Precision ${pct(M.precision, 1)}, recall ${pct(M.recall, 1)}. ${M.wrong_approvals_clean_credit === fp ? `All ${fp}` : `${M.wrong_approvals_clean_credit} of the ${fp}`} applicants it wrongly approved had a clean credit history, the signal it trusts most.</p>`;
+  navMarks($("chCm"));
+
+  lines($("chRoc"), {
+    series: [{ name: "Model", color: css("--s-approved"), points: M.roc }], step: true, diag: true,
+    xDomain: [0, 1], yDomain: [0, 1], xTicks: [0, .25, .5, .75, 1], yTicks: [0, .25, .5, .75, 1],
+    xFmt: (v) => pct(v), yFmt: (v) => pct(v), tipX: (v) => `Rejections let through: ${pct(v)}`, tipY: (v) => `approvals caught ${pct(v)}`, h: 260,
+  });
+  $("chRoc").insertAdjacentHTML("beforeend", `<p class="note" style="margin:8px 0 0">Across: share of rejected applicants wrongly approved. Up: share of approved applicants caught.</p>`);
+
+  const wEl = $("chWeights"), wmax = Math.max(...DATA.weights.map(d => Math.abs(d.w)));
+  hbars(wEl, DATA.weights.map(d => ({ label: d.label, value: d.w, tip: `<div class="tt">${esc(d.label)}</div>Weight ${d.w.toFixed(3)}` })), { max: wmax * 1.05, diverging: true, fmt: (v) => Math.abs(v) < .005 ? "0.00" : (v > 0 ? "+" : "−") + Math.abs(v).toFixed(2) });
+  table(wEl, ["Feature", "Weight"], DATA.weights.map(d => [d.label, d.w.toFixed(3)]));
+
+  const cEl = $("chCompare"), C = M.comparison;
+  hbars(cEl, C.map(r => ({
+    label: r.name, sub: r.name === "Always approve" ? "Baseline" : `${r.name === M.chosen ? "Served model, " : ""}AUC ${r.auc.toFixed(3)}`, value: r.accuracy,
+    color: r.name === M.chosen ? css("--s-approved") : r.name === "Always approve" ? css("--fill-2") : css("--seq-2"),
+    tip: `<div class="tt">${esc(r.name)}</div>Accuracy ${pct(r.accuracy, 1)} ± ${pct(r.accuracy_sd, 1)}<br>AUC ${r.auc.toFixed(3)}`,
+  })), { fmt: (v) => pct(v, 1) });
+  cEl.insertAdjacentHTML("beforeend", `<p class="note" style="margin:12px 0 0">${esc(M.why)}</p>`);
+  table(cEl, ["Model", "Accuracy", "± spread", "ROC AUC"], C.map(r => [r.name, pct(r.accuracy, 1), pct(r.accuracy_sd, 1), r.auc.toFixed(3)]));
+}
+
+/* ===================== CALCULATORS ===================== */
+const nv = (id) => { const v = parseFloat($(id).value.replace(/[,\s₹]/g, "")); return Number.isFinite(v) ? v : NaN; };
+function emiOf(P, ratePct, months) { const r = ratePct / 1200; return r === 0 ? P / months : P * r * Math.pow(1 + r, months) / (Math.pow(1 + r, months) - 1); }
+function out(el, items) { el.innerHTML = items.map(([k, v, hero]) => `<div><div class="k">${k}</div><div class="v${hero ? " hero" : ""}">${v}</div></div>`).join(""); }
+function bad(el, chart, msg) { el.innerHTML = `<p class="calc-warn" style="grid-column:1/-1">${msg}</p>`; if (chart) chart.innerHTML = ""; }
+
+function drawEmi() {
+  const P = nv("emiP"), R = nv("emiR"), Y = nv("emiN");
+  if (!(P > 0) || !(R >= 0 && R < 50) || !(Y >= 1 && Y <= 40)) return bad($("emiOut"), $("chEmi"), "Enter an amount above 0, a rate from 0 to 50%, and 1 to 40 years.");
+  const n = Math.round(Y * 12), emi = emiOf(P, R, n), r = R / 1200;
+  let bal = P; const yrs = [], prin = [], intr = [];
+  for (let yIdx = 0; yIdx < Math.ceil(n / 12); yIdx++) {
+    let pp = 0, ii = 0;
+    for (let k = 0; k < 12 && yIdx * 12 + k < n; k++) { const i = bal * r, p = emi - i; ii += i; pp += p; bal -= p; }
+    yrs.push(String(yIdx + 1)); prin.push(pp); intr.push(ii);
+  }
+  const total = emi * n;
+  out($("emiOut"), [["Monthly EMI", inr(emi), true], ["Total interest", inrShort(total - P)], ["Total paid", inrShort(total)]]);
+  const el = $("chEmi");
+  vbars(el, { cats: yrs, series: [{ name: "Principal", color: css("--s-approved"), values: prin }, { name: "Interest", color: css("--s-alt"), values: intr }],
+    stacked: true, h: 220, yFmt: (v, t) => t ? inr(v) : inrShort(v), tipTitle: (c) => "Year " + c, xEvery: yrs.length > 12 ? 5 : 1 });
+  el.insertAdjacentHTML("beforeend", `<p class="note" style="margin:8px 0 0">Paid per year. Early years are mostly interest.</p>`);
+  table(el, ["Year", "Principal", "Interest"], yrs.map((y, i) => [y, inr(prin[i]), inr(intr[i])]));
+}
+
+function drawAff() {
+  const I = nv("affI"), E = nv("affE") || 0, F = nv("affF"), R = nv("affR"), Y = nv("affN");
+  if (!(I > 0) || !(F > 0 && F <= 100) || !(R >= 0 && R < 50) || !(Y >= 1 && Y <= 40)) return bad($("affOut"), $("chAff"), "Check the inputs: income above 0, share between 1 and 100%, rate 0 to 50%, 1 to 40 years.");
+  const maxEmi = I * F / 100 - E;
+  if (maxEmi <= 0) return bad($("affOut"), $("chAff"), `Existing EMIs already take ${pct(E / I)} of income, above the ${F}% cap. There's no room for a new loan.`);
+  const loanFor = (yrs) => { const n = yrs * 12, r = R / 1200; return r === 0 ? maxEmi * n : maxEmi * (Math.pow(1 + r, n) - 1) / (r * Math.pow(1 + r, n)); };
+  out($("affOut"), [["Largest loan", inrShort(loanFor(Y)), true], ["Max new EMI", inr(maxEmi)], ["Current EMIs use", pct(E / I)]]);
+  const tenures = [10, 15, 20, 25, 30], vals = tenures.map(loanFor), mx = Math.max(...vals);
+  hbars($("chAff"), tenures.map((t, i) => ({ label: t + " years", value: vals[i], color: t === Math.round(Y) ? css("--s-approved") : css("--seq-2"), tip: `<div class="tt">${t} years</div>Up to ${inr(vals[i])} at ${inr(maxEmi)} a month` })), { max: mx * 1.02, fmt: inrShort });
+}
+
+function drawPre() {
+  const P = nv("preP"), R = nv("preR"), Y = nv("preN"), X = nv("preX") || 0;
+  if (!(P > 0) || !(R > 0 && R < 50) || !(Y >= 1 && Y <= 40) || X < 0) return bad($("preOut"), $("chPre"), "Enter an amount above 0, a rate above 0, 1 to 40 years, and an extra of 0 or more.");
+  const n = Math.round(Y * 12), emi = emiOf(P, R, n), r = R / 1200;
+  const run = (extra) => { let b = P, m = 0, int = 0; const pts = [[0, P]]; while (b > .5 && m < 600) { const i = b * r; int += i; b = Math.max(0, b + i - emi - extra); m++; if (m % 3 === 0 || b === 0) pts.push([m / 12, b]); } return { months: m, interest: int, pts }; };
+  const a = run(0), b = run(X), saved = a.months - b.months;
+  out($("preOut"), [["Interest saved", inrShort(a.interest - b.interest), true], ["Closes sooner by", saved >= 12 ? `${Math.floor(saved / 12)} yr ${saved % 12} mo` : `${saved} months`], ["New tenure", `${Math.floor(b.months / 12)} yr ${b.months % 12} mo`], ["Regular EMI", inr(emi)]]);
+  const pad = (pts, len) => { const o = [...pts]; while (o.length < len) o.push([o[o.length - 1][0] + .25, 0]); return o; };
+  const L = a.pts.length;
+  lines($("chPre"), {
+    series: [{ name: "Regular EMI", color: css("--s-approved"), points: a.pts }, { name: `With ${inr(X)} extra`, color: css("--s-alt"), points: pad(b.pts, L).map((p, i) => [a.pts[i][0], p[1]]) }],
+    xDomain: [0, Math.ceil(a.months / 12)], yDomain: [0, niceTicks(P, 4).at(-1)], xTicks: niceTicks(Math.ceil(a.months / 12), 4).filter(t => t <= Math.ceil(a.months / 12)), yTicks: niceTicks(P, 4),
+    xFmt: (v) => v + " yr", yFmt: inrShort, tipX: (v) => `After ${Math.floor(v)} yr ${Math.round((v % 1) * 12)} mo`, tipY: inr, h: 280,
+  });
+  $("chPre").insertAdjacentHTML("afterbegin", `<p class="mini-title" style="margin-top:0">Balance left to repay</p>`);
+}
+for (const id of ["emiP", "emiR", "emiN"]) $(id).addEventListener("input", drawEmi);
+for (const id of ["affI", "affE", "affF", "affR", "affN"]) $(id).addEventListener("input", drawAff);
+for (const id of ["preP", "preR", "preN", "preX"]) $(id).addEventListener("input", drawPre);
+const MONEY = ["emiP", "affI", "affE", "preP", "preX"];
+const fmtMoney = (id) => { const v = nv(id); if (Number.isFinite(v)) $(id).value = Math.round(v).toLocaleString("en-IN"); };
+MONEY.forEach(id => { fmtMoney(id); $(id).addEventListener("blur", () => fmtMoney(id)); });
+function drawCalcs() { MONEY.forEach(fmtMoney); drawEmi(); drawAff(); drawPre(); }
+
+/* ===================== ROUTING ===================== */
+const TITLES = { assess: "Assess", insights: "Insights", model: "Model", calculators: "Calculators" };
+const DRAW = { assess: drawWhatif, insights: drawInsights, model: drawModel, calculators: drawCalcs };
+let current = null;
+function route() {
+  const name = (location.hash.slice(1) in TITLES) ? location.hash.slice(1) : "assess";
+  document.querySelectorAll("[data-section]").forEach(s => s.hidden = s.dataset.section !== name);
+  document.querySelectorAll("[data-nav]").forEach(a => a.dataset.nav === name ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  $("inlineTitle").textContent = TITLES[name];
+  $("assessActions").hidden = name !== "assess";
+  document.title = TITLES[name] + " · Loan Risk";
+  if (current !== null && current !== name) scrollTo(0, 0);
+  current = name; hideTip(); DRAW[name]();
+}
+addEventListener("hashchange", route);
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => DRAW[current](), 150); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DRAW[current]());
+const bar = $("topbar");
+addEventListener("scroll", () => bar.classList.toggle("scrolled", scrollY > 40), { passive: true });
+fillCopy(); route();
+connect().then(() => { fillCopy(); DRAW[current](); if (assessed && validate().ok) render(); });
+</script>
+</body>
+</html>
