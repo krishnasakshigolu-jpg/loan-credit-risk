@@ -2,20 +2,16 @@
 rem Double-click to start the Loan Risk dashboard. The first run sets up Python and trains the model.
 setlocal
 cd /d "%~dp0"
-set PORT=8000
 
 if not exist ".venv\Scripts\python.exe" (
   echo Setting up for the first time. This takes a minute or two.
   python -m venv .venv || goto :nopython
   ".venv\Scripts\python" -m pip install --quiet -r requirements.txt || goto :fail
-  rem train once so the saved model matches the installed scikit-learn
-  ".venv\Scripts\python" train.py || goto :fail
 )
 
-echo Starting the dashboard at http://127.0.0.1:%PORT%  (close this window to stop it)
-rem open the browser a moment later, once the server is listening
-start "" /b cmd /c "timeout /t 3 /nobreak >nul & start "" http://127.0.0.1:%PORT%"
-".venv\Scripts\python" -m uvicorn app:app --port %PORT%
+echo Starting the services. The dashboard opens at http://127.0.0.1:8000  (close this window to stop)
+rem dev.py trains on the first run, starts scoring, insights and the gateway, then opens the browser
+".venv\Scripts\python" scripts\dev.py --open
 goto :eof
 
 :nopython
