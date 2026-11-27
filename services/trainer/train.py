@@ -1,17 +1,20 @@
-"""Train the loan risk model and write everything the app needs.
+"""Trainer job: train the loan risk model and publish a new artifact version.
 
-    python train.py
+    python services/trainer/train.py
 
 Steps:
   1. Load train.csv (614 past home loan applications).
   2. Compare five models with 5-fold cross-validation.
   3. Evaluate the chosen model on a 20% held-out split.
-  4. Refit it on all rows and save model/pipeline.joblib.
-  5. Write model/metrics.json and model/dashboard.json for the API.
-  6. Refresh the offline copy of the model and data inside index.html.
+  4. Refit it on all rows and save pipeline.joblib.
+  5. Write metrics.json, dashboard.json and browser_model.json.
+  6. Point <ARTIFACTS_DIR>/CURRENT at the new version.
+
+It runs, publishes and exits. Restart the scoring and insights services to load
+the new version, and run services/gateway/embed.py to refresh the copy inside
+the dashboard page.
 """
 import json
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,20 +32,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
-from features import FEATURES, build_features
+from loan_features import FEATURE_LABELS, FEATURES, artifacts_root, build_features, publish
 
-ROOT = Path(__file__).parent
-DATA_CSV = ROOT / "train.csv"
-OUT = ROOT / "model"
-INDEX = ROOT / "index.html"
+DATA_CSV = Path(__file__).parent / "train.csv"
 SEED = 42
-
-FEATURE_LABELS = {
-    "credit_history": "Credit history", "married": "Married", "graduate": "Graduate",
-    "self_employed": "Self-employed", "semiurban": "Semi-urban", "rural": "Rural",
-    "dependents": "Dependents", "log_total_income": "Household income",
-    "log_loan_amount": "Loan amount", "emi_to_income": "Repayment burden",
-}
 
 
 def make_pipeline(clf, scale=True):
@@ -160,21 +153,6 @@ def browser_copy(pipe):
     }
 
 
-def sync_index(model_copy, data):
-    if not INDEX.exists():
-        print("  index.html not found, skipped the offline copy")
-        return
-    html = INDEX.read_text(encoding="utf-8")
-    for key, value in (("MODEL", model_copy), ("DATA", data)):
-        pattern = rf"/\*{key}\*/.*?/\*END\*/"
-        if not re.search(pattern, html, flags=re.S):
-            raise SystemExit(f"index.html has no /*{key}*/ ... /*END*/ marker")
-        payload = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
-        html = re.sub(pattern, lambda _: f"/*{key}*/{payload}/*END*/", html, count=1, flags=re.S)
-    INDEX.write_text(html, encoding="utf-8")
-    print("  refreshed the offline copy in index.html")
-
-
 def main():
     df = pd.read_csv(DATA_CSV)
     y = (df["Loan_Status"] == "Y").astype(int)
@@ -188,14 +166,19 @@ def main():
     print(f"  accuracy {test['accuracy']:.3f}  AUC {test['auc']:.3f}  (always approve: {test['baseline']:.3f})")
 
     final = make_pipeline(LogisticRegression(C=0.5, max_iter=1000)).fit(df, y)
-    OUT.mkdir(exist_ok=True)
+    trained_at = datetime.now(timezone.utc)
+    root = artifacts_root()
+    version = "v" + trained_at.strftime("%Y%m%dT%H%M%S%fZ")
+    out = root / version
+    out.mkdir(parents=True)
     joblib.dump({
         "pipeline": final,
         "features": FEATURES,
         "sklearn_version": sklearn.__version__,
-        "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "version": version,
+        "trained_at": trained_at.isoformat(timespec="seconds"),
         "rows": int(len(df)),
-    }, OUT / "pipeline.joblib")
+    }, out / "pipeline.joblib")
 
     coef = final.named_steps["clf"].coef_[0]
     cv_row = next(r for r in comparison if r["name"] == CHOSEN)
@@ -209,15 +192,16 @@ def main():
             [{"key": f, "label": FEATURE_LABELS[f], "w": round(float(c), 6)} for f, c in zip(FEATURES, coef)],
             key=lambda d: -d["w"]),
     }
-    (OUT / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    (out / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
     data = dashboard_data(df, y)
     data["model"] = {k: metrics[k] for k in ("accuracy", "auc", "precision", "recall", "test_n", "cm", "roc", "cv", "baseline", "wrong_approvals_clean_credit", "comparison", "chosen", "why")}
     data["weights"] = metrics["weights"]
-    (OUT / "dashboard.json").write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
-    print(f"Saved {OUT / 'pipeline.joblib'}, metrics.json and dashboard.json")
+    (out / "dashboard.json").write_text(json.dumps(data, separators=(",", ":"), ensure_ascii=False), encoding="utf-8")
+    (out / "browser_model.json").write_text(json.dumps(browser_copy(final)), encoding="utf-8")
 
-    sync_index(browser_copy(final), data)
+    publish(root, version)
+    print(f"Published {version} to {root} (pipeline.joblib, metrics.json, dashboard.json, browser_model.json)")
 
 
 if __name__ == "__main__":

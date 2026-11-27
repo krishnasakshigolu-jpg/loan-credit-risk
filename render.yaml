@@ -1,11 +1,18 @@
-# Render blueprint: one free web service running the FastAPI app and the dashboard.
+# Render blueprint: one free web service that runs every service as a local
+# process (scripts/dev.py). Only the gateway listens on Render's $PORT; scoring
+# and insights stay on 127.0.0.1 inside the same machine.
 services:
   - type: web
     name: loan-credit-risk
     runtime: python
     plan: free
     # train at build time so the saved model matches the scikit-learn Render installs
-    buildCommand: pip install -r requirements.txt && python train.py
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /api/health
+    buildCommand: pip install -r requirements.txt && python services/trainer/train.py
+    startCommand: python scripts/dev.py
+    healthCheckPath: /healthz
     autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PYTHON_VERSION
+        value: "3.12.7"

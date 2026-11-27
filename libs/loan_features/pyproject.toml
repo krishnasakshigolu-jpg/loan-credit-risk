@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "loan-features"
+version = "1.0.0"
+description = "Feature engineering, request schema and artifact loading shared by the loan risk services"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "pydantic>=2"]
+
+[tool.setuptools]
+packages = ["loan_features"]

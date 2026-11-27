@@ -19,6 +19,13 @@ FEATURES = [
     "emi_to_income",
 ]
 
+FEATURE_LABELS = {
+    "credit_history": "Credit history", "married": "Married", "graduate": "Graduate",
+    "self_employed": "Self-employed", "semiurban": "Semi-urban", "rural": "Rural",
+    "dependents": "Dependents", "log_total_income": "Household income",
+    "log_loan_amount": "Loan amount", "emi_to_income": "Repayment burden",
+}
+
 # Fill values for blanks, taken from the training data.
 MEDIAN_LOAN_AMOUNT = 128.0   # thousands
 DEFAULT_TERM = 360.0         # months, by far the most common term
